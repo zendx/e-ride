@@ -1,0 +1,251 @@
+"use client";
+
+import { FormEvent, useMemo, useState } from "react";
+
+type EnrollmentPayload = {
+  name: string;
+  slug: string;
+  adminFullName: string;
+  adminEmail: string;
+  adminPassword: string;
+  appName?: string;
+  supportEmail?: string;
+  supportPhone?: string;
+  primaryColor?: string;
+  secondaryColor?: string;
+  customDomain?: string;
+  platformCommissionBps?: number;
+};
+
+const INITIAL_STATE: EnrollmentPayload = {
+  name: "",
+  slug: "",
+  adminFullName: "",
+  adminEmail: "",
+  adminPassword: "",
+  appName: "",
+  supportEmail: "",
+  supportPhone: "",
+  primaryColor: "#0EA5E9",
+  secondaryColor: "#0F172A",
+  customDomain: "",
+  platformCommissionBps: 1500
+};
+
+export function EnrollTenantForm() {
+  const [accessToken, setAccessToken] = useState("");
+  const [payload, setPayload] = useState<EnrollmentPayload>(INITIAL_STATE);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
+
+  const submitDisabled = useMemo(() => {
+    return (
+      isSubmitting ||
+      !accessToken.trim() ||
+      !payload.name.trim() ||
+      !payload.slug.trim() ||
+      !payload.adminFullName.trim() ||
+      !payload.adminEmail.trim() ||
+      !payload.adminPassword.trim()
+    );
+  }, [accessToken, isSubmitting, payload]);
+
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setIsSubmitting(true);
+    setResult(null);
+
+    try {
+      const response = await fetch("/api/super-admin/tenants", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${accessToken.trim()}`
+        },
+        body: JSON.stringify({
+          ...payload,
+          slug: payload.slug.trim().toLowerCase(),
+          name: payload.name.trim(),
+          adminFullName: payload.adminFullName.trim(),
+          adminEmail: payload.adminEmail.trim().toLowerCase(),
+          appName: payload.appName?.trim() || undefined,
+          supportEmail: payload.supportEmail?.trim() || undefined,
+          supportPhone: payload.supportPhone?.trim() || undefined,
+          customDomain: payload.customDomain?.trim() || undefined,
+          primaryColor: payload.primaryColor?.trim() || undefined,
+          secondaryColor: payload.secondaryColor?.trim() || undefined,
+          platformCommissionBps: payload.platformCommissionBps || undefined
+        })
+      });
+
+      if (!response.ok) {
+        const body = (await response.json()) as { error?: { message?: string } };
+        setResult({
+          ok: false,
+          message: body.error?.message ?? `Request failed (${response.status})`
+        });
+        return;
+      }
+
+      const body = (await response.json()) as {
+        data: { tenant: { name: string; slug: string }; tenantAdmin: { email: string } };
+      };
+      setResult({
+        ok: true,
+        message: `Tenant ${body.data.tenant.name} (${body.data.tenant.slug}) enrolled. Admin: ${body.data.tenantAdmin.email}`
+      });
+      setPayload(INITIAL_STATE);
+    } catch {
+      setResult({ ok: false, message: "Network error while enrolling tenant." });
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  return (
+    <section className="card">
+      <h2>Enroll Tenant</h2>
+      <p className="muted">Use a super-admin access token to create tenant + tenant admin.</p>
+
+      <form onSubmit={onSubmit} className="form-grid">
+        <label>
+          Access Token
+          <input
+            type="password"
+            value={accessToken}
+            onChange={(event) => setAccessToken(event.target.value)}
+            placeholder="Bearer token"
+          />
+        </label>
+
+        <label>
+          Tenant Name
+          <input
+            value={payload.name}
+            onChange={(event) => setPayload({ ...payload, name: event.target.value })}
+            placeholder="Gamma Rides"
+          />
+        </label>
+
+        <label>
+          Tenant Slug
+          <input
+            value={payload.slug}
+            onChange={(event) => setPayload({ ...payload, slug: event.target.value })}
+            placeholder="gamma-rides"
+          />
+        </label>
+
+        <label>
+          Admin Full Name
+          <input
+            value={payload.adminFullName}
+            onChange={(event) => setPayload({ ...payload, adminFullName: event.target.value })}
+            placeholder="Gamma Admin"
+          />
+        </label>
+
+        <label>
+          Admin Email
+          <input
+            type="email"
+            value={payload.adminEmail}
+            onChange={(event) => setPayload({ ...payload, adminEmail: event.target.value })}
+            placeholder="admin@gamma-rides.com"
+          />
+        </label>
+
+        <label>
+          Admin Password
+          <input
+            type="password"
+            value={payload.adminPassword}
+            onChange={(event) => setPayload({ ...payload, adminPassword: event.target.value })}
+            placeholder="StrongPass123"
+          />
+        </label>
+
+        <label>
+          App Name
+          <input
+            value={payload.appName}
+            onChange={(event) => setPayload({ ...payload, appName: event.target.value })}
+            placeholder="GammaGo"
+          />
+        </label>
+
+        <label>
+          Support Email
+          <input
+            type="email"
+            value={payload.supportEmail}
+            onChange={(event) => setPayload({ ...payload, supportEmail: event.target.value })}
+            placeholder="support@gamma-rides.com"
+          />
+        </label>
+
+        <label>
+          Support Phone
+          <input
+            value={payload.supportPhone}
+            onChange={(event) => setPayload({ ...payload, supportPhone: event.target.value })}
+            placeholder="+1000000"
+          />
+        </label>
+
+        <label>
+          Primary Color
+          <input
+            value={payload.primaryColor}
+            onChange={(event) => setPayload({ ...payload, primaryColor: event.target.value })}
+            placeholder="#0EA5E9"
+          />
+        </label>
+
+        <label>
+          Secondary Color
+          <input
+            value={payload.secondaryColor}
+            onChange={(event) => setPayload({ ...payload, secondaryColor: event.target.value })}
+            placeholder="#0F172A"
+          />
+        </label>
+
+        <label>
+          Custom Domain
+          <input
+            value={payload.customDomain}
+            onChange={(event) => setPayload({ ...payload, customDomain: event.target.value })}
+            placeholder="rides.example.com"
+          />
+        </label>
+
+        <label>
+          Platform Commission (bps)
+          <input
+            type="number"
+            min={0}
+            max={5000}
+            value={payload.platformCommissionBps ?? 1500}
+            onChange={(event) =>
+              setPayload({
+                ...payload,
+                platformCommissionBps: Number.isNaN(Number(event.target.value))
+                  ? 1500
+                  : Number(event.target.value)
+              })
+            }
+          />
+        </label>
+
+        <button type="submit" disabled={submitDisabled}>
+          {isSubmitting ? "Enrolling..." : "Enroll Tenant"}
+        </button>
+      </form>
+
+      {result ? (
+        <p className={result.ok ? "status-ok" : "status-error"}>{result.message}</p>
+      ) : null}
+    </section>
+  );
+}

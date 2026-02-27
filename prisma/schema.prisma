@@ -1,0 +1,581 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  super_admin
+  tenant_admin
+  dispatcher
+  rider
+  passenger
+  support
+}
+
+enum UserStatus {
+  active
+  suspended
+  pending
+}
+
+enum TripStatus {
+  requested
+  assigned
+  accepted
+  arrived
+  in_progress
+  completed
+  cancelled
+}
+
+enum PaymentMethod {
+  wallet
+  card
+  cash
+}
+
+enum PaymentStatus {
+  pending
+  authorized
+  captured
+  failed
+  refunded
+}
+
+enum KycStatus {
+  pending
+  approved
+  rejected
+}
+
+enum ComplaintStatus {
+  open
+  investigating
+  resolved
+  closed
+}
+
+enum RiderAvailability {
+  offline
+  online
+  on_trip
+}
+
+enum LogLevel {
+  debug
+  info
+  warn
+  error
+}
+
+enum NotificationChannel {
+  email
+  sms
+  push
+  in_app
+}
+
+enum NotificationStatus {
+  queued
+  sent
+  delivered
+  failed
+}
+
+enum ComplianceStatus {
+  pending
+  verified
+  rejected
+  expired
+}
+
+enum SupportChannel {
+  chat
+  email
+  phone
+}
+
+enum CommunicationDirection {
+  inbound
+  outbound
+}
+
+model Tenant {
+  id                     String         @id @default(cuid())
+  slug                   String         @unique
+  name                   String
+  customDomain           String?        @unique
+  status                 String         @default("active")
+  supportEmail           String?
+  supportPhone           String?
+  primaryColor           String         @default("#0D9488")
+  secondaryColor         String         @default("#0F172A")
+  logoUrl                String?
+  appName                String         @default("CarryGo")
+  platformCommissionBps  Int            @default(1500)
+  createdAt              DateTime       @default(now())
+  updatedAt              DateTime       @updatedAt
+
+  users                  User[]
+  riders                 RiderProfile[]
+  passengers             PassengerProfile[]
+  zones                  Zone[]
+  trips                  Trip[]
+  pricingRules           PricingRule[]
+  payouts                Payout[]
+  transactions           PaymentTransaction[]
+  walletAccounts         WalletAccount[]
+  complaints             Complaint[]
+  tickets                SupportTicket[]
+  tenantKycDocuments     KycDocument[]
+  auditLogs              AuditLog[]
+  driverComplianceDocs   DriverComplianceDocument[]
+  driverLocationPings    DriverLocationPing[]
+  notificationLogs       NotificationLog[]
+  systemErrorLogs        SystemErrorLog[]
+  securityLogs           SecurityLog[]
+  supportCommunications  SupportCommunication[]
+  geofenceAlerts         GeofenceAlert[]
+  analyticsSnapshots     AnalyticsSnapshot[]
+}
+
+model User {
+  id               String          @id @default(cuid())
+  tenantId         String?
+  email            String          @unique
+  passwordHash     String
+  fullName         String
+  phoneNumber      String?
+  profilePhotoUrl  String?
+  role             Role
+  status           UserStatus      @default(active)
+  refreshTokenHash String?
+  lastLoginAt      DateTime?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  tenant           Tenant?         @relation(fields: [tenantId], references: [id])
+  riderProfile     RiderProfile?
+  passengerProfile PassengerProfile?
+  assignedTrips    Trip[]          @relation("dispatcherAssigned")
+  audits           AuditLog[]
+  kycDocuments     KycDocument[]
+  complaints       Complaint[]     @relation("complaintPassenger")
+  handledComplaints Complaint[]    @relation("complaintSupport")
+  ticketsCreated   SupportTicket[] @relation("ticketCreator")
+  ticketsAssigned  SupportTicket[] @relation("ticketAssignee")
+  securityLogs     SecurityLog[]
+  notificationLogs NotificationLog[]
+  communications   SupportCommunication[]
+
+  @@index([tenantId, role])
+}
+
+model RiderProfile {
+  id                String            @id @default(cuid())
+  tenantId          String
+  userId            String            @unique
+  licenseNumber     String
+  vehicleType       String
+  vehicleMake       String?
+  vehicleModel      String?
+  vehicleColor      String?
+  vehiclePlate      String
+  licenseDocumentUrl String?
+  idDocumentUrl     String?
+  lat               Float?
+  lng               Float?
+  availability      RiderAvailability @default(offline)
+  rating            Float             @default(5)
+  totalTrips        Int               @default(0)
+  earningsMinor     BigInt            @default(0)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  tenant            Tenant            @relation(fields: [tenantId], references: [id])
+  user              User              @relation(fields: [userId], references: [id])
+  trips             Trip[]            @relation("tripRider")
+  complianceDocs    DriverComplianceDocument[]
+  locationPings     DriverLocationPing[]
+
+  @@index([tenantId, availability, lat, lng])
+}
+
+model PassengerProfile {
+  id                 String           @id @default(cuid())
+  tenantId           String
+  userId             String           @unique
+  defaultPaymentMethod PaymentMethod  @default(wallet)
+  rating             Float            @default(5)
+  walletBalanceMinor BigInt           @default(0)
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  tenant             Tenant           @relation(fields: [tenantId], references: [id])
+  user               User             @relation(fields: [userId], references: [id])
+  trips              Trip[]           @relation("tripPassenger")
+
+  @@index([tenantId])
+}
+
+model Zone {
+  id         String     @id @default(cuid())
+  tenantId   String
+  name       String
+  polygonGeoJson Json
+  isActive   Boolean    @default(true)
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  tenant     Tenant     @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, name])
+}
+
+model PricingRule {
+  id                 String    @id @default(cuid())
+  tenantId           String
+  name               String
+  baseFareMinor      Int
+  perKmMinor         Int
+  perMinuteMinor     Int
+  bookingFeeMinor    Int       @default(0)
+  minimumFareMinor   Int       @default(0)
+  surgeMultiplier    Float     @default(1)
+  isActive           Boolean   @default(true)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  tenant             Tenant    @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId, isActive])
+}
+
+model Trip {
+  id                     String          @id @default(cuid())
+  tenantId               String
+  passengerId            String
+  riderId                String?
+  dispatcherId           String?
+  pickupAddress          String
+  dropoffAddress         String
+  pickupLat              Float
+  pickupLng              Float
+  dropoffLat             Float
+  dropoffLng             Float
+  estimatedDistanceKm    Float
+  estimatedDurationMin   Int
+  actualDistanceKm       Float?
+  actualDurationMin      Int?
+  routeGeoJson           Json?
+  surgeMultiplierApplied Float?          @default(1)
+  dynamicPricingJson     Json?
+  mapRoutePolyline       String?
+  status                 TripStatus      @default(requested)
+  requestedAt            DateTime        @default(now())
+  acceptedAt             DateTime?
+  arrivedAt              DateTime?
+  startedAt              DateTime?
+  completedAt            DateTime?
+  cancelledAt            DateTime?
+  cancelReason           String?
+  fareSubtotalMinor      Int             @default(0)
+  fareSurgeMinor         Int             @default(0)
+  fareFeesMinor          Int             @default(0)
+  discountMinor          Int             @default(0)
+  promoCode              String?
+  fareTotalMinor         Int             @default(0)
+  commissionMinor        Int             @default(0)
+  tenantRevenueMinor     Int             @default(0)
+  createdAt              DateTime        @default(now())
+  updatedAt              DateTime        @updatedAt
+
+  tenant                 Tenant          @relation(fields: [tenantId], references: [id])
+  passenger              PassengerProfile @relation("tripPassenger", fields: [passengerId], references: [id])
+  rider                  RiderProfile?   @relation("tripRider", fields: [riderId], references: [id])
+  dispatcher             User?           @relation("dispatcherAssigned", fields: [dispatcherId], references: [id])
+  payment                PaymentTransaction?
+  complaint              Complaint?
+  locationPings          DriverLocationPing[]
+  geofenceAlerts         GeofenceAlert[]
+
+  @@index([tenantId, status, requestedAt])
+  @@index([tenantId, riderId, status])
+  @@index([tenantId, passengerId, status])
+}
+
+model PaymentTransaction {
+  id                    String        @id @default(cuid())
+  tenantId              String
+  tripId                String        @unique
+  method                PaymentMethod
+  status                PaymentStatus @default(pending)
+  amountMinor           Int
+  feeMinor              Int           @default(0)
+  discountMinor         Int           @default(0)
+  commissionMinor       Int           @default(0)
+  providerReference     String?
+  receiptUrl            String?
+  metadata              Json?
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+
+  tenant                Tenant        @relation(fields: [tenantId], references: [id])
+  trip                  Trip          @relation(fields: [tripId], references: [id])
+
+  @@index([tenantId, status, createdAt])
+}
+
+model WalletAccount {
+  id              String    @id @default(cuid())
+  tenantId        String
+  userId          String
+  balanceMinor    BigInt    @default(0)
+  currency        String    @default("USD")
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  tenant          Tenant    @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, userId])
+}
+
+model Payout {
+  id                String   @id @default(cuid())
+  tenantId          String
+  riderId           String
+  amountMinor       Int
+  periodStart       DateTime
+  periodEnd         DateTime
+  status            String   @default("pending")
+  createdAt         DateTime @default(now())
+
+  tenant            Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId, riderId, periodStart])
+}
+
+model KycDocument {
+  id                String    @id @default(cuid())
+  tenantId          String
+  userId            String
+  documentType      String
+  documentUrl       String
+  status            KycStatus @default(pending)
+  reviewerId        String?
+  rejectionReason   String?
+  reviewedAt        DateTime?
+  createdAt         DateTime  @default(now())
+
+  tenant            Tenant    @relation(fields: [tenantId], references: [id])
+  user              User      @relation(fields: [userId], references: [id])
+
+  @@index([tenantId, status, createdAt])
+}
+
+model Complaint {
+  id                String          @id @default(cuid())
+  tenantId          String
+  tripId            String?         @unique
+  passengerUserId   String
+  assignedSupportId String?
+  title             String
+  description       String
+  status            ComplaintStatus @default(open)
+  resolutionNotes   String?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  tenant            Tenant          @relation(fields: [tenantId], references: [id])
+  trip              Trip?           @relation(fields: [tripId], references: [id])
+  passenger         User            @relation("complaintPassenger", fields: [passengerUserId], references: [id])
+  supportAgent      User?           @relation("complaintSupport", fields: [assignedSupportId], references: [id])
+
+  @@index([tenantId, status, createdAt])
+}
+
+model SupportTicket {
+  id                String   @id @default(cuid())
+  tenantId          String
+  creatorId         String
+  assigneeId        String?
+  subject           String
+  body              String
+  priority          String   @default("normal")
+  status            String   @default("open")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  tenant            Tenant   @relation(fields: [tenantId], references: [id])
+  creator           User     @relation("ticketCreator", fields: [creatorId], references: [id])
+  assignee          User?    @relation("ticketAssignee", fields: [assigneeId], references: [id])
+  communications    SupportCommunication[]
+
+  @@index([tenantId, status, createdAt])
+}
+
+model AuditLog {
+  id                String   @id @default(cuid())
+  tenantId          String?
+  actorUserId       String?
+  actorRole         Role?
+  action            String
+  entityType        String
+  entityId          String
+  beforeJson        Json?
+  afterJson         Json?
+  ipAddress         String?
+  userAgent         String?
+  createdAt         DateTime @default(now())
+
+  tenant            Tenant?  @relation(fields: [tenantId], references: [id])
+  user              User?    @relation(fields: [actorUserId], references: [id])
+
+  @@index([tenantId, createdAt])
+  @@index([entityType, entityId, createdAt])
+}
+
+model DriverComplianceDocument {
+  id                String           @id @default(cuid())
+  tenantId          String
+  riderId           String
+  documentType      String
+  documentUrl       String
+  status            ComplianceStatus @default(pending)
+  expiresAt         DateTime?
+  notes             String?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  tenant            Tenant           @relation(fields: [tenantId], references: [id])
+  rider             RiderProfile     @relation(fields: [riderId], references: [id])
+
+  @@index([tenantId, riderId, status])
+}
+
+model DriverLocationPing {
+  id                String       @id @default(cuid())
+  tenantId          String
+  riderId           String
+  tripId            String?
+  lat               Float
+  lng               Float
+  heading           Float?
+  speedKph          Float?
+  accuracyMeters    Float?
+  createdAt         DateTime     @default(now())
+
+  tenant            Tenant       @relation(fields: [tenantId], references: [id])
+  rider             RiderProfile @relation(fields: [riderId], references: [id])
+  trip              Trip?        @relation(fields: [tripId], references: [id])
+
+  @@index([tenantId, riderId, createdAt])
+  @@index([tenantId, tripId, createdAt])
+}
+
+model NotificationLog {
+  id                String             @id @default(cuid())
+  tenantId          String
+  userId            String?
+  channel           NotificationChannel
+  title             String?
+  message           String
+  status            NotificationStatus @default(queued)
+  providerMessageId String?
+  payloadJson       Json?
+  createdAt         DateTime           @default(now())
+
+  tenant            Tenant             @relation(fields: [tenantId], references: [id])
+  user              User?              @relation(fields: [userId], references: [id])
+
+  @@index([tenantId, status, createdAt])
+  @@index([tenantId, channel, createdAt])
+}
+
+model SystemErrorLog {
+  id                String     @id @default(cuid())
+  tenantId          String?
+  level             LogLevel   @default(error)
+  service           String?
+  message           String
+  stackTrace        String?
+  metaJson          Json?
+  createdAt         DateTime   @default(now())
+
+  tenant            Tenant?    @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId, level, createdAt])
+}
+
+model SecurityLog {
+  id                String     @id @default(cuid())
+  tenantId          String?
+  userId            String?
+  action            String
+  success           Boolean    @default(true)
+  ipAddress         String?
+  userAgent         String?
+  metadata          Json?
+  createdAt         DateTime   @default(now())
+
+  tenant            Tenant?    @relation(fields: [tenantId], references: [id])
+  user              User?      @relation(fields: [userId], references: [id])
+
+  @@index([tenantId, action, createdAt])
+  @@index([userId, createdAt])
+}
+
+model SupportCommunication {
+  id                String                 @id @default(cuid())
+  tenantId          String
+  ticketId          String
+  userId            String?
+  channel           SupportChannel
+  direction         CommunicationDirection
+  body              String
+  metadata          Json?
+  createdAt         DateTime               @default(now())
+
+  tenant            Tenant                 @relation(fields: [tenantId], references: [id])
+  ticket            SupportTicket          @relation(fields: [ticketId], references: [id])
+  user              User?                  @relation(fields: [userId], references: [id])
+
+  @@index([tenantId, ticketId, createdAt])
+}
+
+model GeofenceAlert {
+  id                String     @id @default(cuid())
+  tenantId          String
+  zoneId            String?
+  tripId            String?
+  alertType         String
+  lat               Float?
+  lng               Float?
+  metadata          Json?
+  createdAt         DateTime   @default(now())
+
+  tenant            Tenant     @relation(fields: [tenantId], references: [id])
+  trip              Trip?      @relation(fields: [tripId], references: [id])
+
+  @@index([tenantId, alertType, createdAt])
+  @@index([tenantId, tripId, createdAt])
+}
+
+model AnalyticsSnapshot {
+  id                String     @id @default(cuid())
+  tenantId          String
+  metricKey         String
+  metricDate        DateTime
+  metricValue       Float
+  metadata          Json?
+  createdAt         DateTime   @default(now())
+
+  tenant            Tenant     @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId, metricKey, metricDate])
+}
