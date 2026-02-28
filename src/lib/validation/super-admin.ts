@@ -1,4 +1,5 @@
-import { z } from "zod";
+﻿import { z } from "zod";
+import { Role } from "@prisma/client";
 
 const hexColorRegex = /^#([0-9A-Fa-f]{6})$/;
 const slugRegex = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -19,3 +20,26 @@ export const enrollTenantSchema = z.object({
 });
 
 export type EnrollTenantInput = z.infer<typeof enrollTenantSchema>;
+
+export const superAdminProfileUpdateSchema = z.object({
+  fullName: z.string().min(2).max(120).optional(),
+  email: z.string().email().optional(),
+  currentPassword: z.string().min(8).max(128).optional(),
+  newPassword: z.string().min(8).max(128).optional()
+}).refine(
+  (value) => !(value.newPassword && !value.currentPassword),
+  { message: "currentPassword is required when changing password", path: ["currentPassword"] }
+).refine(
+  (value) => Boolean(value.fullName || value.email || value.newPassword),
+  { message: "At least one field must be provided" }
+);
+
+export const createAdminUserSchema = z.object({
+  fullName: z.string().min(2).max(120),
+  email: z.string().email(),
+  password: z.string().min(8).max(128),
+  role: z.enum([Role.super_admin, Role.support]).default(Role.support)
+});
+
+export type SuperAdminProfileUpdateInput = z.infer<typeof superAdminProfileUpdateSchema>;
+export type CreateAdminUserInput = z.infer<typeof createAdminUserSchema>;

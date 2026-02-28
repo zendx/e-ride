@@ -1,8 +1,9 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
+import { PasswordField } from "@/components/password-field";
 
 type LoginResponse = {
   data: {
@@ -63,9 +64,9 @@ export default function TenantAdminLoginPage() {
   return (
     <main className="container">
       <h1>Tenant Admin Login</h1>
-      <p className="muted">Sign in with a tenant admin account to open the dashboard.</p>
+      <p className="page-subtitle">Sign in with a tenant admin account to open the dashboard.</p>
 
-      <section className="card" style={{ marginTop: 20 }}>
+      <section className="card section">
         <form className="form-grid" onSubmit={onSubmit}>
           <label>
             Email
@@ -78,8 +79,7 @@ export default function TenantAdminLoginPage() {
           </label>
           <label>
             Password
-            <input
-              type="password"
+            <PasswordField
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               placeholder="Enter password"

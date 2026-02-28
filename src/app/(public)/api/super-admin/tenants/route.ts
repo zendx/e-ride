@@ -12,19 +12,35 @@ export async function GET(request: NextRequest) {
     const auth = await getAuthContext(request);
     requireRole(auth.role as Role, [Role.super_admin]);
 
-    const tenants = await prisma.tenant.findMany({
-      orderBy: { createdAt: "desc" },
-      include: {
-        _count: {
-          select: {
-            users: true,
-            trips: true,
-            complaints: true,
-            tenantKycDocuments: true
+    let tenants;
+    try {
+      tenants = await prisma.tenant.findMany({
+        orderBy: { createdAt: "desc" },
+        include: {
+          _count: {
+            select: {
+              users: true,
+              trips: true,
+              complaints: true,
+              tenantKycDocuments: true
+            }
           }
         }
-      }
-    });
+      });
+    } catch {
+      tenants = await prisma.tenant.findMany({
+        orderBy: { createdAt: "desc" },
+        include: {
+          _count: {
+            select: {
+              users: true,
+              trips: true,
+              complaints: true
+            }
+          }
+        }
+      });
+    }
 
     return ok(tenants);
   } catch (error) {

@@ -1,6 +1,7 @@
-"use client";
+﻿"use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import { PasswordField } from "@/components/password-field";
 
 type EnrollmentPayload = {
   name: string;
@@ -50,17 +51,23 @@ export function EnrollTenantForm() {
     );
   }, [accessToken, isSubmitting, payload]);
 
+  useEffect(() => {
+    const storedToken = localStorage.getItem("carrygo_access_token");
+    if (storedToken) setAccessToken(storedToken);
+  }, []);
+
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setIsSubmitting(true);
     setResult(null);
 
     try {
+      const token = accessToken.trim().replace(/^Bearer\s+/i, "");
       const response = await fetch("/api/super-admin/tenants", {
         method: "POST",
         headers: {
           "content-type": "application/json",
-          authorization: `Bearer ${accessToken.trim()}`
+          authorization: `Bearer ${token}`
         },
         body: JSON.stringify({
           ...payload,
@@ -110,11 +117,10 @@ export function EnrollTenantForm() {
       <form onSubmit={onSubmit} className="form-grid">
         <label>
           Access Token
-          <input
-            type="password"
+          <PasswordField
             value={accessToken}
             onChange={(event) => setAccessToken(event.target.value)}
-            placeholder="Bearer token"
+            placeholder="JWT access token"
           />
         </label>
 
@@ -157,8 +163,7 @@ export function EnrollTenantForm() {
 
         <label>
           Admin Password
-          <input
-            type="password"
+          <PasswordField
             value={payload.adminPassword}
             onChange={(event) => setPayload({ ...payload, adminPassword: event.target.value })}
             placeholder="StrongPass123"

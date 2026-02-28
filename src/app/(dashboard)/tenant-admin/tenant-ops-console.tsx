@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { PasswordField } from "@/components/password-field";
 
 type MonitoringResponse = {
   data: {
@@ -209,15 +210,14 @@ export function TenantOpsConsole() {
   }, [accessToken, loadData]);
 
   return (
-    <section className="card" style={{ marginTop: 18 }}>
+    <section className="card section">
       <h2>Live Operations Console</h2>
       <p className="muted">Near real-time monitoring with 8s refresh.</p>
 
       <div className="form-grid">
         <label>
           Access Token
-          <input
-            type="password"
+          <PasswordField
             value={accessToken}
             onChange={(event) => setAccessToken(event.target.value)}
             placeholder="Tenant admin or dispatcher bearer token"
@@ -235,11 +235,11 @@ export function TenantOpsConsole() {
         </label>
       </div>
 
-      <div style={{ marginTop: 12 }}>
+      <div className="toolbar">
         <button onClick={() => void loadData()} disabled={!accessToken.trim() || loading}>
           {loading ? "Refreshing..." : "Refresh Now"}
         </button>
-        {lastUpdatedAt ? <span className="muted" style={{ marginLeft: 12 }}>Last updated: {lastUpdatedAt}</span> : null}
+        {lastUpdatedAt ? <span className="muted">Last updated: {lastUpdatedAt}</span> : null}
       </div>
 
       {error ? <p className="status-error">{error}</p> : null}
@@ -325,7 +325,7 @@ export function TenantOpsConsole() {
                 ))}
               </tbody>
             </table>
-            <table className="data-table" style={{ marginTop: 10 }}>
+            <table className="data-table">
               <thead><tr><th>Payment</th><th>Trip</th><th>Method</th><th>Status</th><th>Amount</th><th>Discount</th><th>Time</th></tr></thead>
               <tbody>
                 {snapshot.payments.map((payment) => (
@@ -395,3 +395,6 @@ export function TenantOpsConsole() {
     </section>
   );
 }
+
+
+

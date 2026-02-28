@@ -1,4 +1,4 @@
-import { Prisma, Role } from "@prisma/client";
+﻿import { Prisma, Role } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { AppError } from "@/lib/errors/app-error";
 import { hashPassword } from "@/lib/auth/password";
@@ -6,7 +6,7 @@ import { EnrollTenantInput } from "@/lib/validation/super-admin";
 
 type EnrollActor = {
   userId: string;
-  role: Role.super_admin;
+  role: Role;
   ipAddress?: string;
   userAgent?: string;
 };

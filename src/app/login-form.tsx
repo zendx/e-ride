@@ -1,13 +1,15 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { FormEvent, useState } from "react";
+import { PasswordField } from "@/components/password-field";
 
 type LoginResponse = {
   data: {
     accessToken: string;
     refreshToken: string;
     user: {
+      id: string;
       role: "super_admin" | "tenant_admin" | "dispatcher" | "rider" | "passenger" | "support";
       email: string;
     };
@@ -18,7 +20,11 @@ type ErrorResponse = {
   error?: { message?: string };
 };
 
-export function LoginForm() {
+type LoginFormProps = {
+  onLoginSuccess?: (payload: LoginResponse["data"]) => void;
+};
+
+export function LoginForm({ onLoginSuccess }: LoginFormProps) {
   const [email, setEmail] = useState("superadmin@carrygo.com");
   const [password, setPassword] = useState("Passw0rd!");
   const [submitting, setSubmitting] = useState(false);
@@ -53,6 +59,7 @@ export function LoginForm() {
       setAccessToken(body.data.accessToken);
       setRole(body.data.user.role);
       setMessage(`Logged in as ${body.data.user.email} (${body.data.user.role}). Token saved to localStorage.`);
+      onLoginSuccess?.(body.data);
     } catch {
       setError("Network error while logging in.");
     } finally {
@@ -61,7 +68,7 @@ export function LoginForm() {
   }
 
   return (
-    <section className="card" style={{ marginTop: 20 }}>
+    <section className="card section">
       <h2>Login</h2>
       <p className="muted">Use your account to get an access token for protected APIs.</p>
       <form className="form-grid" onSubmit={onSubmit}>
@@ -71,7 +78,7 @@ export function LoginForm() {
         </label>
         <label>
           Password
-          <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} />
+          <PasswordField value={password} onChange={(event) => setPassword(event.target.value)} />
         </label>
         <button type="submit" disabled={submitting}>
           {submitting ? "Logging in..." : "Login"}

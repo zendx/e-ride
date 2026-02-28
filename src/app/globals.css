@@ -1,15 +1,15 @@
 ﻿:root {
-  --bg: #f3f7f6;
-  --bg-secondary: #e5efec;
-  --text: #112322;
-  --muted: #4e6866;
+  --bg: #f4f7fb;
+  --bg-secondary: #e9eef8;
+  --text: #0f1f33;
+  --muted: #5a6f8a;
   --surface: #ffffff;
-  --surface-2: #f7fbfa;
-  --border: #d5e3df;
-  --brand: #0e7a72;
-  --brand-strong: #0a5f59;
-  --shadow: 0 14px 34px rgba(9, 36, 33, 0.1);
-  --shadow-soft: 0 8px 18px rgba(9, 36, 33, 0.08);
+  --surface-2: #f8fbff;
+  --border: #d8e1ee;
+  --brand: #0e7490;
+  --brand-strong: #0b5e75;
+  --shadow: 0 16px 34px rgba(19, 39, 73, 0.13);
+  --shadow-soft: 0 8px 20px rgba(19, 39, 73, 0.09);
 }
 
 * {
@@ -25,10 +25,10 @@ body {
   margin: 0;
   color: var(--text);
   background:
-    radial-gradient(1200px 520px at -12% -10%, #d7ece6 10%, transparent 50%),
-    radial-gradient(1000px 440px at 108% 0%, #dce9ff 8%, transparent 46%),
+    radial-gradient(1300px 520px at -14% -8%, #dce9ff 10%, transparent 50%),
+    radial-gradient(1100px 440px at 108% 0%, #e6f2fb 8%, transparent 46%),
     linear-gradient(180deg, var(--bg), var(--bg-secondary));
-  line-height: 1.45;
+  line-height: 1.5;
 }
 
 a {
@@ -44,20 +44,20 @@ article {
 }
 
 .container {
-  max-width: 1080px;
+  max-width: 1180px;
   margin: 0 auto;
-  padding: 30px 20px 40px;
+  padding: 34px 20px 44px;
 }
 
 h1 {
   margin: 0;
-  font-size: clamp(1.7rem, 2.4vw, 2.2rem);
+  font-size: clamp(1.8rem, 2.6vw, 2.4rem);
   letter-spacing: -0.02em;
 }
 
 h2 {
   margin: 0;
-  font-size: 1.2rem;
+  font-size: 1.24rem;
   letter-spacing: -0.01em;
 }
 
@@ -65,39 +65,45 @@ p {
   margin: 10px 0 0;
 }
 
+.page-subtitle {
+  margin-top: 8px;
+  color: var(--muted);
+  max-width: 740px;
+}
+
 .grid {
   display: grid;
-  gap: 14px;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  margin-top: 18px;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  margin-top: 20px;
 }
 
 .card {
   background: linear-gradient(180deg, var(--surface), var(--surface-2));
   border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 16px;
+  border-radius: 18px;
+  padding: 18px;
   box-shadow: var(--shadow-soft);
   transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
 }
 
 a.card:hover {
   transform: translateY(-2px);
-  border-color: #b3cbc4;
+  border-color: #b7c8df;
   box-shadow: var(--shadow);
 }
 
 .card strong {
   display: block;
   color: var(--muted);
-  font-size: 0.84rem;
+  font-size: 0.78rem;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.09em;
 }
 
 .card p {
   margin-top: 8px;
-  font-size: 1.45rem;
+  font-size: 1.7rem;
   font-weight: 700;
   color: var(--text);
 }
@@ -107,10 +113,10 @@ a.card:hover {
 }
 
 .form-grid {
-  margin-top: 14px;
+  margin-top: 16px;
   display: grid;
-  gap: 12px;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
 }
 
 .form-grid label {
@@ -124,10 +130,11 @@ a.card:hover {
 .form-grid input {
   width: 100%;
   border: 1px solid var(--border);
-  border-radius: 11px;
+  border-radius: 12px;
   background: #ffffff;
   color: var(--text);
-  padding: 10px 12px;
+  padding: 11px 13px;
+  height: 44px;
   font: inherit;
   transition: border-color 0.16s ease, box-shadow 0.16s ease;
 }
@@ -135,10 +142,11 @@ a.card:hover {
 .form-grid select {
   width: 100%;
   border: 1px solid var(--border);
-  border-radius: 11px;
+  border-radius: 12px;
   background: #ffffff;
   color: var(--text);
-  padding: 10px 12px;
+  padding: 11px 13px;
+  height: 44px;
   font: inherit;
   transition: border-color 0.16s ease, box-shadow 0.16s ease;
 }
@@ -146,37 +154,87 @@ a.card:hover {
 .form-grid input:focus,
 .form-grid select:focus {
   outline: none;
-  border-color: #97bab1;
-  box-shadow: 0 0 0 4px rgba(14, 122, 114, 0.14);
+  border-color: #8eb2dc;
+  box-shadow: 0 0 0 4px rgba(14, 116, 144, 0.15);
 }
 
-button,
-.form-grid button {
+.password-field {
+  position: relative;
+}
+
+.password-field input {
+  padding-right: 42px;
+  height: 44px;
+}
+
+.password-toggle {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 30px;
+  height: 30px;
   border: none;
-  border-radius: 11px;
+  border-radius: 8px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  color: var(--muted);
+  box-shadow: none;
+}
+
+.password-toggle:hover {
+  background: #edf4ff;
+  color: var(--text);
+  transform: translateY(-50%);
+  box-shadow: none;
+  filter: none;
+}
+
+button:not(.password-toggle),
+.form-grid button:not(.password-toggle) {
+  border: none;
+  border-radius: 12px;
   background: linear-gradient(180deg, var(--brand), var(--brand-strong));
   color: #ffffff;
-  padding: 11px 14px;
+  padding: 11px 15px;
+  height: 44px;
   font: inherit;
-  font-weight: 700;
+  font-weight: 650;
   cursor: pointer;
-  box-shadow: 0 10px 18px rgba(9, 88, 82, 0.26);
+  box-shadow: 0 10px 18px rgba(10, 93, 114, 0.25);
   transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
 }
 
-button:hover:not(:disabled),
-.form-grid button:hover:not(:disabled) {
+.form-grid button:not(.password-toggle) {
+  width: 100%;
+}
+
+button:not(.password-toggle):hover:not(:disabled),
+.form-grid button:not(.password-toggle):hover:not(:disabled) {
   transform: translateY(-1px);
-  box-shadow: 0 13px 24px rgba(9, 88, 82, 0.32);
+  box-shadow: 0 13px 24px rgba(10, 93, 114, 0.3);
   filter: saturate(1.08);
 }
 
-button:disabled,
-.form-grid button:disabled {
+button:not(.password-toggle):disabled,
+.form-grid button:not(.password-toggle):disabled {
   opacity: 0.62;
   cursor: not-allowed;
   transform: none;
   box-shadow: none;
+}
+
+.toolbar {
+  margin: 16px 0 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.section {
+  margin-top: 20px;
 }
 
 .status-ok,
@@ -201,7 +259,7 @@ button:disabled,
 }
 
 .section-block {
-  margin-top: 16px;
+  margin-top: 20px;
 }
 
 .section-block h3 {
@@ -221,7 +279,7 @@ button:disabled,
 
 .data-table th,
 .data-table td {
-  padding: 10px 12px;
+  padding: 11px 12px;
   text-align: left;
   vertical-align: top;
   border-bottom: 1px solid #e2ece9;
@@ -229,15 +287,22 @@ button:disabled,
 }
 
 .data-table th {
-  background: #edf6f3;
+  background: #edf4ff;
   color: var(--muted);
   font-size: 0.78rem;
   text-transform: uppercase;
   letter-spacing: 0.06em;
+  position: sticky;
+  top: 0;
+  z-index: 1;
 }
 
 .data-table tr:last-child td {
   border-bottom: none;
+}
+
+.data-table tbody tr:nth-child(even) td {
+  background: #fbfdff;
 }
 
 @media (max-width: 640px) {
