@@ -6,6 +6,7 @@ import { PATCH as tenantBrandingPatch } from "@/app/(public)/api/tenant/branding
 import { GET as superAdminTenantsGet, POST as superAdminTenantsPost } from "@/app/(public)/api/super-admin/tenants/route";
 import { PATCH as superAdminTenantPatch } from "@/app/(public)/api/super-admin/tenants/[tenantId]/route";
 import { GET as superAdminTenantInsightsGet } from "@/app/(public)/api/super-admin/tenants/[tenantId]/insights/route";
+import { PATCH as superAdminTenantCredentialsPatch } from "@/app/(public)/api/super-admin/tenants/[tenantId]/credentials/route";
 
 const {
   loginMock,
@@ -22,6 +23,10 @@ const {
   passengerFindManyMock,
   tripFindManyMock,
   paymentFindManyMock
+  ,
+  userFindManyMock,
+  userFindFirstMock,
+  userUpdateMock
 } = vi.hoisted(() => ({
   loginMock: vi.fn(),
   refreshMock: vi.fn(),
@@ -36,7 +41,10 @@ const {
   riderFindManyMock: vi.fn(),
   passengerFindManyMock: vi.fn(),
   tripFindManyMock: vi.fn(),
-  paymentFindManyMock: vi.fn()
+  paymentFindManyMock: vi.fn(),
+  userFindManyMock: vi.fn(),
+  userFindFirstMock: vi.fn(),
+  userUpdateMock: vi.fn()
 }));
 
 vi.mock("@/lib/modules/auth/service", () => ({
@@ -78,6 +86,11 @@ vi.mock("@/lib/db", () => ({
     },
     paymentTransaction: {
       findMany: paymentFindManyMock
+    },
+    user: {
+      findMany: userFindManyMock,
+      findFirst: userFindFirstMock,
+      update: userUpdateMock
     },
     auditLog: {
       create: auditCreateMock
@@ -469,6 +482,7 @@ describe("RBAC and tenant isolation API routes", () => {
     passengerFindManyMock.mockResolvedValue([{ id: "p1" }]);
     tripFindManyMock.mockResolvedValue([{ id: "tr1" }]);
     paymentFindManyMock.mockResolvedValue([{ id: "tx1" }]);
+    userFindManyMock.mockResolvedValue([{ id: "u-admin-1" }]);
 
     const response = await superAdminTenantInsightsGet(
       new Request("http://localhost/api/super-admin/tenants/t1/insights", {
@@ -480,6 +494,7 @@ describe("RBAC and tenant isolation API routes", () => {
     expect(response.status).toBe(200);
     const body = await response.json();
     expect(body.data.tenant.id).toBe("t1");
+    expect(body.data.tenantAdmins).toEqual([{ id: "u-admin-1" }]);
     expect(body.data.riders).toEqual([{ id: "r1" }]);
     expect(body.data.passengers).toEqual([{ id: "p1" }]);
     expect(body.data.tripHistory).toEqual([{ id: "tr1" }]);
@@ -503,5 +518,69 @@ describe("RBAC and tenant isolation API routes", () => {
 
     expect(response.status).toBe(403);
     expect(tenantFindUniqueMock).not.toHaveBeenCalled();
+  });
+
+  it("updates tenant admin credentials when called by super_admin", async () => {
+    getAuthContextMock.mockResolvedValue({
+      userId: "u3",
+      role: "super_admin"
+    });
+
+    userFindFirstMock.mockResolvedValue({
+      id: "u-admin-1",
+      email: "old-admin@alpha.com",
+      fullName: "Alpha Admin",
+      role: "tenant_admin",
+      status: "active"
+    });
+    userUpdateMock.mockResolvedValue({
+      id: "u-admin-1",
+      email: "new-admin@alpha.com",
+      fullName: "Alpha Admin",
+      role: "tenant_admin",
+      status: "active",
+      updatedAt: new Date().toISOString()
+    });
+
+    const response = await superAdminTenantCredentialsPatch(
+      new Request("http://localhost/api/super-admin/tenants/t1/credentials", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          adminUserId: "u-admin-1",
+          email: "new-admin@alpha.com",
+          newPassword: "StrongerPass123"
+        })
+      }) as never,
+      { params: Promise.resolve({ tenantId: "t1" }) }
+    );
+
+    expect(response.status).toBe(200);
+    expect(userUpdateMock).toHaveBeenCalledOnce();
+    expect(auditCreateMock).toHaveBeenCalledOnce();
+  });
+
+  it("forbids tenant admin credential update for non-super-admin", async () => {
+    getAuthContextMock.mockResolvedValue({
+      userId: "u2",
+      role: "tenant_admin",
+      tenantId: "tenant-a",
+      tenantSlug: "alpha"
+    });
+
+    const response = await superAdminTenantCredentialsPatch(
+      new Request("http://localhost/api/super-admin/tenants/t1/credentials", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          adminUserId: "u-admin-1",
+          email: "new-admin@alpha.com"
+        })
+      }) as never,
+      { params: Promise.resolve({ tenantId: "t1" }) }
+    );
+
+    expect(response.status).toBe(403);
+    expect(userUpdateMock).not.toHaveBeenCalled();
   });
 });

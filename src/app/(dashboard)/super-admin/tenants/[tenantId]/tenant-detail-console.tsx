@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { PasswordField } from "@/components/password-field";
 import { clearClientSession, getRoleFromAccessToken, getStoredAccessToken } from "@/lib/auth/client-session";
 
 type ErrorResponse = {
@@ -32,6 +33,14 @@ type TenantInsights = {
       complaints: number;
     };
   };
+  tenantAdmins: Array<{
+    id: string;
+    fullName: string;
+    email: string;
+    status: string;
+    lastLoginAt: string | null;
+    createdAt: string;
+  }>;
   riders: Array<{
     id: string;
     availability: string;
@@ -76,6 +85,7 @@ export function TenantDetailConsole({ tenantId }: { tenantId: string }) {
   const [error, setError] = useState("");
   const [insights, setInsights] = useState<TenantInsights | null>(null);
   const [tenantResult, setTenantResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const [credentialsResult, setCredentialsResult] = useState<{ ok: boolean; message: string } | null>(null);
   const [tenantForm, setTenantForm] = useState({
     name: "",
     slug: "",
@@ -87,6 +97,11 @@ export function TenantDetailConsole({ tenantId }: { tenantId: string }) {
     primaryColor: "#0D9488",
     secondaryColor: "#0F172A",
     platformCommissionBps: 1500
+  });
+  const [credentialsForm, setCredentialsForm] = useState({
+    adminUserId: "",
+    email: "",
+    newPassword: ""
   });
 
   const loadInsights = useCallback(async (rawToken: string) => {
@@ -127,6 +142,12 @@ export function TenantDetailConsole({ tenantId }: { tenantId: string }) {
         primaryColor: body.data.tenant.primaryColor,
         secondaryColor: body.data.tenant.secondaryColor,
         platformCommissionBps: body.data.tenant.platformCommissionBps
+      });
+      const selectedAdmin = body.data.tenantAdmins[0];
+      setCredentialsForm({
+        adminUserId: selectedAdmin?.id ?? "",
+        email: selectedAdmin?.email ?? "",
+        newPassword: ""
       });
     } catch {
       setError("Network error while loading tenant details.");
@@ -198,6 +219,43 @@ export function TenantDetailConsole({ tenantId }: { tenantId: string }) {
     }
   }
 
+  async function submitCredentialsUpdate(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setCredentialsResult(null);
+
+    const token = normalizeToken(accessToken);
+    if (!token || !credentialsForm.adminUserId) return;
+
+    const payload: Record<string, string> = {
+      adminUserId: credentialsForm.adminUserId
+    };
+    if (credentialsForm.email.trim()) payload.email = credentialsForm.email.trim();
+    if (credentialsForm.newPassword.trim()) payload.newPassword = credentialsForm.newPassword;
+
+    try {
+      const response = await fetch(`/api/super-admin/tenants/${tenantId}/credentials`, {
+        method: "PATCH",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        const body = (await response.json()) as ErrorResponse;
+        setCredentialsResult({ ok: false, message: body.error?.message ?? `Credentials update failed (${response.status}).` });
+        return;
+      }
+
+      setCredentialsResult({ ok: true, message: "Tenant admin credentials updated successfully." });
+      setCredentialsForm((current) => ({ ...current, newPassword: "" }));
+      await loadInsights(token);
+    } catch {
+      setCredentialsResult({ ok: false, message: "Network error while updating credentials." });
+    }
+  }
+
   if (!sessionReady) {
     return (
       <main className="container">
@@ -221,6 +279,54 @@ export function TenantDetailConsole({ tenantId }: { tenantId: string }) {
       {error ? <p className="status-error">{error}</p> : null}
       {insights ? (
         <>
+          <section className="card section">
+            <h2>Tenant Admin Login Credentials</h2>
+            <form className="form-grid" onSubmit={submitCredentialsUpdate}>
+              <label>
+                Tenant Admin Account
+                <select
+                  value={credentialsForm.adminUserId}
+                  onChange={(event) => {
+                    const admin = insights.tenantAdmins.find((item) => item.id === event.target.value);
+                    setCredentialsForm({
+                      adminUserId: event.target.value,
+                      email: admin?.email ?? "",
+                      newPassword: ""
+                    });
+                  }}
+                  disabled={!insights.tenantAdmins.length}
+                >
+                  {insights.tenantAdmins.map((admin) => (
+                    <option key={admin.id} value={admin.id}>
+                      {admin.fullName} ({admin.email})
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Login Email
+                <input
+                  type="email"
+                  value={credentialsForm.email}
+                  onChange={(event) => setCredentialsForm({ ...credentialsForm, email: event.target.value })}
+                  disabled={!credentialsForm.adminUserId}
+                />
+              </label>
+              <label>
+                New Password
+                <PasswordField
+                  value={credentialsForm.newPassword}
+                  onChange={(event) => setCredentialsForm({ ...credentialsForm, newPassword: event.target.value })}
+                  placeholder="Leave blank to keep current password"
+                  disabled={!credentialsForm.adminUserId}
+                />
+              </label>
+              <button type="submit" disabled={!credentialsForm.adminUserId}>Save Credentials</button>
+            </form>
+            {!insights.tenantAdmins.length ? <p className="muted">No tenant admin account found for this tenant.</p> : null}
+            {credentialsResult ? <p className={credentialsResult.ok ? "status-ok" : "status-error"}>{credentialsResult.message}</p> : null}
+          </section>
+
           <section className="card section">
             <h2>Edit Tenant</h2>
             <form className="form-grid" onSubmit={submitTenantUpdate}>

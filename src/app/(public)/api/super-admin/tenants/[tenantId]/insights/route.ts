@@ -46,7 +46,20 @@ export async function GET(request: NextRequest, { params }: Params) {
 
     if (!tenant) throw new AppError("Tenant not found", 404, "resource_not_found");
 
-    const [riders, passengers, tripHistory, transactions] = await Promise.all([
+    const [tenantAdmins, riders, passengers, tripHistory, transactions] = await Promise.all([
+      prisma.user.findMany({
+        where: { tenantId, role: Role.tenant_admin },
+        orderBy: { createdAt: "asc" },
+        select: {
+          id: true,
+          fullName: true,
+          email: true,
+          status: true,
+          lastLoginAt: true,
+          createdAt: true
+        }
+      }),
+
       prisma.riderProfile.findMany({
         where: { tenantId },
         orderBy: { createdAt: "desc" },
@@ -128,10 +141,19 @@ export async function GET(request: NextRequest, { params }: Params) {
       })
     ]);
 
+    const passengersSafe = passengers.map((passenger) => ({
+      ...passenger,
+      walletBalanceMinor:
+        typeof passenger.walletBalanceMinor === "bigint"
+          ? passenger.walletBalanceMinor.toString()
+          : passenger.walletBalanceMinor
+    }));
+
     return ok({
       tenant,
+      tenantAdmins,
       riders,
-      passengers,
+      passengers: passengersSafe,
       tripHistory,
       transactions
     });

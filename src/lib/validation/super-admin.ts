@@ -57,6 +57,16 @@ export const superAdminTenantUpdateSchema = z.object({
   { message: "At least one field must be provided" }
 );
 
+export const superAdminTenantCredentialsUpdateSchema = z.object({
+  adminUserId: z.string().min(1).optional(),
+  email: z.string().email().optional(),
+  newPassword: z.string().min(8).max(128).optional()
+}).refine(
+  (value) => Boolean(value.email || value.newPassword),
+  { message: "At least one credential field must be provided" }
+);
+
 export type SuperAdminProfileUpdateInput = z.infer<typeof superAdminProfileUpdateSchema>;
 export type CreateAdminUserInput = z.infer<typeof createAdminUserSchema>;
 export type SuperAdminTenantUpdateInput = z.infer<typeof superAdminTenantUpdateSchema>;
+export type SuperAdminTenantCredentialsUpdateInput = z.infer<typeof superAdminTenantCredentialsUpdateSchema>;

@@ -30,6 +30,14 @@ function parseLimit(input: string | null, fallback: number) {
   return Math.min(Math.floor(n), 100);
 }
 
+async function safe<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
+  try {
+    return await fn();
+  } catch {
+    return fallback;
+  }
+}
+
 export async function GET(request: NextRequest) {
   try {
     const auth = await getAuthContext(request);
@@ -64,41 +72,55 @@ export async function GET(request: NextRequest) {
       geofenceAlerts,
       analyticsSnapshots
     ] = await Promise.all([
-      Promise.all([
-        prisma.riderProfile.count({ where: { tenantId: auth.tenantId, availability: "online" } }),
-        prisma.riderProfile.count({ where: { tenantId: auth.tenantId } }),
-        prisma.passengerProfile.count({ where: { tenantId: auth.tenantId } }),
-        prisma.trip.count({ where: { tenantId: auth.tenantId, status: { in: ACTIVE_STATUSES } } }),
-        prisma.trip.count({ where: { tenantId: auth.tenantId, status: "completed", completedAt: { gte: todayStart } } }),
-        prisma.trip.count({ where: { tenantId: auth.tenantId, status: "cancelled", cancelledAt: { gte: todayStart } } }),
-        prisma.paymentTransaction.count({ where: { tenantId: auth.tenantId, status: "captured" } }),
-        prisma.complaint.count({ where: { tenantId: auth.tenantId, status: { in: ["open", "investigating"] } } }),
-        prisma.supportTicket.count({ where: { tenantId: auth.tenantId, status: { in: ["open", "pending", "investigating"] } } })
-      ]).then(
-        ([
-          onlineRiders,
-          totalRiders,
-          totalPassengers,
-          activeTripsCount,
-          completedToday,
-          cancelledToday,
-          capturedPayments,
-          openComplaints,
-          openSupportTickets
-        ]) => ({
-        onlineRiders,
-        totalRiders,
-        totalPassengers,
-        activeTripsCount,
-        completedToday,
-        cancelledToday,
-        capturedPayments,
-        openComplaints,
-        openSupportTickets
-      })
+      safe(
+        () =>
+          Promise.all([
+            prisma.riderProfile.count({ where: { tenantId: auth.tenantId, availability: "online" } }),
+            prisma.riderProfile.count({ where: { tenantId: auth.tenantId } }),
+            prisma.passengerProfile.count({ where: { tenantId: auth.tenantId } }),
+            prisma.trip.count({ where: { tenantId: auth.tenantId, status: { in: ACTIVE_STATUSES } } }),
+            prisma.trip.count({ where: { tenantId: auth.tenantId, status: "completed", completedAt: { gte: todayStart } } }),
+            prisma.trip.count({ where: { tenantId: auth.tenantId, status: "cancelled", cancelledAt: { gte: todayStart } } }),
+            prisma.paymentTransaction.count({ where: { tenantId: auth.tenantId, status: "captured" } }),
+            prisma.complaint.count({ where: { tenantId: auth.tenantId, status: { in: ["open", "investigating"] } } }),
+            prisma.supportTicket.count({ where: { tenantId: auth.tenantId, status: { in: ["open", "pending", "investigating"] } } })
+          ]).then(
+            ([
+              onlineRiders,
+              totalRiders,
+              totalPassengers,
+              activeTripsCount,
+              completedToday,
+              cancelledToday,
+              capturedPayments,
+              openComplaints,
+              openSupportTickets
+            ]) => ({
+              onlineRiders,
+              totalRiders,
+              totalPassengers,
+              activeTripsCount,
+              completedToday,
+              cancelledToday,
+              capturedPayments,
+              openComplaints,
+              openSupportTickets
+            })
+          ),
+        {
+          onlineRiders: 0,
+          totalRiders: 0,
+          totalPassengers: 0,
+          activeTripsCount: 0,
+          completedToday: 0,
+          cancelledToday: 0,
+          capturedPayments: 0,
+          openComplaints: 0,
+          openSupportTickets: 0
+        }
       ),
 
-      prisma.trip.findMany({
+      safe(() => prisma.trip.findMany({
         where: { tenantId: auth.tenantId, status: { in: ACTIVE_STATUSES } },
         orderBy: { updatedAt: "desc" },
         take: activeLimit,
@@ -127,9 +149,9 @@ export async function GET(request: NextRequest) {
             }
           }
         }
-      }),
+      }), []),
 
-      prisma.riderProfile.findMany({
+      safe(() => prisma.riderProfile.findMany({
         where: { tenantId: auth.tenantId },
         orderBy: { createdAt: "desc" },
         take: peopleLimit,
@@ -150,9 +172,9 @@ export async function GET(request: NextRequest) {
             }
           }
         }
-      }),
+      }), []),
 
-      prisma.passengerProfile.findMany({
+      safe(() => prisma.passengerProfile.findMany({
         where: { tenantId: auth.tenantId },
         orderBy: { createdAt: "desc" },
         take: peopleLimit,
@@ -171,9 +193,9 @@ export async function GET(request: NextRequest) {
           },
           _count: { select: { trips: true } }
         }
-      }),
+      }), []),
 
-      prisma.trip.findMany({
+      safe(() => prisma.trip.findMany({
         where: {
           tenantId: auth.tenantId,
           ...(historyStatus ? { status: historyStatus } : {})
@@ -196,9 +218,9 @@ export async function GET(request: NextRequest) {
           rider: { select: { user: { select: { fullName: true } } } },
           passenger: { select: { user: { select: { fullName: true } } } }
         }
-      }),
+      }), []),
 
-      prisma.paymentTransaction.findMany({
+      safe(() => prisma.paymentTransaction.findMany({
         where: { tenantId: auth.tenantId },
         orderBy: { createdAt: "desc" },
         take: historyLimit,
@@ -215,9 +237,9 @@ export async function GET(request: NextRequest) {
           providerReference: true,
           createdAt: true
         }
-      }),
+      }), []),
 
-      prisma.complaint.findMany({
+      safe(() => prisma.complaint.findMany({
         where: { tenantId: auth.tenantId },
         orderBy: { createdAt: "desc" },
         take: historyLimit,
@@ -229,9 +251,9 @@ export async function GET(request: NextRequest) {
           createdAt: true,
           updatedAt: true
         }
-      }),
+      }), []),
 
-      prisma.supportTicket.findMany({
+      safe(() => prisma.supportTicket.findMany({
         where: { tenantId: auth.tenantId },
         orderBy: { createdAt: "desc" },
         take: historyLimit,
@@ -243,9 +265,9 @@ export async function GET(request: NextRequest) {
           createdAt: true,
           updatedAt: true
         }
-      }),
+      }), []),
 
-      prisma.supportCommunication.findMany({
+      safe(() => prisma.supportCommunication.findMany({
         where: { tenantId: auth.tenantId },
         orderBy: { createdAt: "desc" },
         take: eventsLimit,
@@ -257,9 +279,9 @@ export async function GET(request: NextRequest) {
           body: true,
           createdAt: true
         }
-      }),
+      }), []),
 
-      prisma.driverLocationPing.findMany({
+      safe(() => prisma.driverLocationPing.findMany({
         where: { tenantId: auth.tenantId },
         orderBy: { createdAt: "desc" },
         take: eventsLimit,
@@ -272,9 +294,9 @@ export async function GET(request: NextRequest) {
           speedKph: true,
           createdAt: true
         }
-      }),
+      }), []),
 
-      prisma.driverComplianceDocument.findMany({
+      safe(() => prisma.driverComplianceDocument.findMany({
         where: { tenantId: auth.tenantId },
         orderBy: { createdAt: "desc" },
         take: eventsLimit,
@@ -286,9 +308,9 @@ export async function GET(request: NextRequest) {
           expiresAt: true,
           createdAt: true
         }
-      }),
+      }), []),
 
-      prisma.notificationLog.findMany({
+      safe(() => prisma.notificationLog.findMany({
         where: { tenantId: auth.tenantId },
         orderBy: { createdAt: "desc" },
         take: eventsLimit,
@@ -302,9 +324,9 @@ export async function GET(request: NextRequest) {
           providerMessageId: true,
           createdAt: true
         }
-      }),
+      }), []),
 
-      prisma.systemErrorLog.findMany({
+      safe(() => prisma.systemErrorLog.findMany({
         where: { tenantId: auth.tenantId },
         orderBy: { createdAt: "desc" },
         take: eventsLimit,
@@ -315,9 +337,9 @@ export async function GET(request: NextRequest) {
           message: true,
           createdAt: true
         }
-      }),
+      }), []),
 
-      prisma.securityLog.findMany({
+      safe(() => prisma.securityLog.findMany({
         where: { tenantId: auth.tenantId },
         orderBy: { createdAt: "desc" },
         take: eventsLimit,
@@ -329,9 +351,9 @@ export async function GET(request: NextRequest) {
           ipAddress: true,
           createdAt: true
         }
-      }),
+      }), []),
 
-      prisma.geofenceAlert.findMany({
+      safe(() => prisma.geofenceAlert.findMany({
         where: { tenantId: auth.tenantId },
         orderBy: { createdAt: "desc" },
         take: eventsLimit,
@@ -344,9 +366,9 @@ export async function GET(request: NextRequest) {
           lng: true,
           createdAt: true
         }
-      }),
+      }), []),
 
-      prisma.analyticsSnapshot.findMany({
+      safe(() => prisma.analyticsSnapshot.findMany({
         where: { tenantId: auth.tenantId },
         orderBy: { metricDate: "desc" },
         take: eventsLimit,
@@ -356,14 +378,22 @@ export async function GET(request: NextRequest) {
           metricDate: true,
           metricValue: true
         }
-      })
+      }), [])
     ]);
+
+    const passengersSafe = passengers.map((passenger) => ({
+      ...passenger,
+      walletBalanceMinor:
+        typeof passenger.walletBalanceMinor === "bigint"
+          ? passenger.walletBalanceMinor.toString()
+          : passenger.walletBalanceMinor
+    }));
 
     return ok({
       summary,
       activeTrips,
       riders,
-      passengers,
+      passengers: passengersSafe,
       tripHistory,
       payments,
       complaints,
