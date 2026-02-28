@@ -1,7 +1,8 @@
 ﻿"use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { PasswordField } from "@/components/password-field";
+import { useRouter } from "next/navigation";
+import { clearClientSession, getRoleFromAccessToken, getStoredAccessToken } from "@/lib/auth/client-session";
 
 type MonitoringResponse = {
   data: {
@@ -149,7 +150,9 @@ type ErrorResponse = {
 const STATUS_FILTERS = ["all", "requested", "assigned", "accepted", "arrived", "in_progress", "completed", "cancelled"] as const;
 
 export function TenantOpsConsole() {
+  const router = useRouter();
   const [accessToken, setAccessToken] = useState("");
+  const [sessionReady, setSessionReady] = useState(false);
   const [statusFilter, setStatusFilter] = useState<(typeof STATUS_FILTERS)[number]>("all");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -180,6 +183,12 @@ export function TenantOpsConsole() {
       });
 
       if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+          setSessionReady(false);
+          clearClientSession();
+          router.replace("/tenant-admin/login");
+          return;
+        }
         const body = (await response.json()) as ErrorResponse;
         setError(body.error?.message ?? `Monitoring request failed (${response.status})`);
         return;
@@ -193,12 +202,26 @@ export function TenantOpsConsole() {
     } finally {
       setLoading(false);
     }
-  }, [accessToken, query]);
+  }, [accessToken, query, router]);
 
   useEffect(() => {
-    const storedToken = localStorage.getItem("carrygo_access_token");
-    if (storedToken) setAccessToken(storedToken);
-  }, []);
+    const storedToken = getStoredAccessToken();
+    if (!storedToken) {
+      setSessionReady(false);
+      router.replace("/tenant-admin/login");
+      return;
+    }
+
+    if (getRoleFromAccessToken(storedToken) !== "tenant_admin") {
+      setSessionReady(false);
+      clearClientSession();
+      router.replace("/tenant-admin/login");
+      return;
+    }
+
+    setAccessToken(storedToken);
+    setSessionReady(true);
+  }, [router]);
 
   useEffect(() => {
     if (!accessToken.trim()) return;
@@ -209,20 +232,16 @@ export function TenantOpsConsole() {
     return () => clearInterval(interval);
   }, [accessToken, loadData]);
 
+  if (!sessionReady) {
+    return <p className="muted">Redirecting to login...</p>;
+  }
+
   return (
     <section className="card section">
       <h2>Live Operations Console</h2>
       <p className="muted">Near real-time monitoring with 8s refresh.</p>
 
       <div className="form-grid">
-        <label>
-          Access Token
-          <PasswordField
-            value={accessToken}
-            onChange={(event) => setAccessToken(event.target.value)}
-            placeholder="Tenant admin or dispatcher bearer token"
-          />
-        </label>
         <label>
           Ride Status Filter
           <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}>
@@ -239,11 +258,22 @@ export function TenantOpsConsole() {
         <button onClick={() => void loadData()} disabled={!accessToken.trim() || loading}>
           {loading ? "Refreshing..." : "Refresh Now"}
         </button>
+        <button
+          type="button"
+          onClick={() => {
+            clearClientSession();
+            setAccessToken("");
+            setSnapshot(null);
+            router.push("/tenant-admin/login");
+          }}
+        >
+          Logout
+        </button>
         {lastUpdatedAt ? <span className="muted">Last updated: {lastUpdatedAt}</span> : null}
       </div>
 
       {error ? <p className="status-error">{error}</p> : null}
-      {!snapshot ? <p className="muted">Add token to load riders, passengers, ride records, logs, and analytics.</p> : null}
+      {!snapshot ? <p className="muted">Loading riders, passengers, ride records, logs, and analytics.</p> : null}
 
       {snapshot ? (
         <>

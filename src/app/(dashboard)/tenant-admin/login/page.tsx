@@ -1,9 +1,10 @@
 ﻿"use client";
 
 import Link from "next/link";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PasswordField } from "@/components/password-field";
+import { getRoleFromAccessToken, getStoredAccessToken, persistClientSession } from "@/lib/auth/client-session";
 
 type LoginResponse = {
   data: {
@@ -26,6 +27,14 @@ export default function TenantAdminLoginPage() {
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    const token = getStoredAccessToken();
+    if (!token) return;
+    if (getRoleFromAccessToken(token) === "tenant_admin") {
+      router.replace("/tenant-admin");
+    }
+  }, [router]);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -51,8 +60,7 @@ export default function TenantAdminLoginPage() {
         return;
       }
 
-      localStorage.setItem("carrygo_access_token", body.data.accessToken);
-      localStorage.setItem("carrygo_refresh_token", body.data.refreshToken);
+      persistClientSession(body.data.accessToken, body.data.refreshToken);
       router.push("/tenant-admin");
     } catch {
       setError("Network error while logging in.");

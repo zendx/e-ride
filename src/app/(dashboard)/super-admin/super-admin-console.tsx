@@ -2,8 +2,8 @@
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { LoginForm } from "@/app/login-form";
 import { PasswordField } from "@/components/password-field";
+import { clearClientSession, getRoleFromAccessToken, getStoredAccessToken } from "@/lib/auth/client-session";
 
 type AdminRole = "super_admin" | "support";
 
@@ -20,6 +20,12 @@ type TenantRow = {
   name: string;
   status: string;
   supportEmail: string | null;
+  supportPhone: string | null;
+  customDomain: string | null;
+  appName: string;
+  primaryColor: string;
+  secondaryColor: string;
+  platformCommissionBps: number;
   createdAt: string;
   _count: {
     users: number;
@@ -59,7 +65,7 @@ function normalizeToken(token: string) {
 export function SuperAdminConsole() {
   const router = useRouter();
   const [accessToken, setAccessToken] = useState("");
-  const [authenticated, setAuthenticated] = useState(false);
+  const [sessionReady, setSessionReady] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [overview, setOverview] = useState<SuperAdminOverview | null>(null);
@@ -86,17 +92,18 @@ export function SuperAdminConsole() {
   const loadDashboard = useCallback(async (rawToken: string) => {
     const token = normalizeToken(rawToken);
     if (!token) {
-      setAuthenticated(false);
+      setSessionReady(false);
       setOverview(null);
       setTenants([]);
       setProfile(null);
       setAdminUsers([]);
+      clearClientSession();
+      router.replace("/super-admin/login");
       return;
     }
 
     setLoading(true);
     setError("");
-    setAuthenticated(true);
 
     try {
       const headers = { authorization: `Bearer ${token}` };
@@ -120,22 +127,22 @@ export function SuperAdminConsole() {
 
       const authFailure = results.find((result) => result.response.status === 401 || result.response.status === 403);
       if (authFailure) {
-        setAuthenticated(false);
+        setSessionReady(false);
         setOverview(null);
         setTenants([]);
         setProfile(null);
         setAdminUsers([]);
         setError("Session expired or unauthorized. Please log in again.");
+        clearClientSession();
+        router.replace("/super-admin/login");
         return;
       }
 
       const failed = results.find((result) => !result.response.ok);
-      if (failed) {
-        if (failed.request.key !== "overview") {
-          const body = failed.body as ErrorResponse | null;
-          const message = body?.error?.message ?? `Request failed (${failed.response.status})`;
-          setError(`Failed to load ${failed.request.key}: ${message}`);
-        }
+      if (failed && failed.request.key !== "overview") {
+        const body = failed.body as ErrorResponse | null;
+        const message = body?.error?.message ?? `Request failed (${failed.response.status})`;
+        setError(`Failed to load ${failed.request.key}: ${message}`);
       }
 
       const overviewResult = results.find((result) => result.request.key === "overview" && result.response.ok);
@@ -166,21 +173,33 @@ export function SuperAdminConsole() {
       if (adminUsersResult?.body && typeof adminUsersResult.body === "object" && "data" in adminUsersResult.body) {
         setAdminUsers((adminUsersResult.body as { data: AdminUser[] }).data);
       }
-
-      localStorage.setItem("carrygo_access_token", token);
     } catch {
       setError("Network error while loading super-admin data.");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [router]);
 
   useEffect(() => {
-    const storedToken = localStorage.getItem("carrygo_access_token");
-    if (!storedToken) return;
+    const storedToken = getStoredAccessToken();
+    if (!storedToken) {
+      setSessionReady(false);
+      router.replace("/super-admin/login");
+      return;
+    }
+
+    const role = getRoleFromAccessToken(storedToken);
+    if (role !== "super_admin") {
+      setSessionReady(false);
+      clearClientSession();
+      router.replace("/super-admin/login");
+      return;
+    }
+
     setAccessToken(storedToken);
+    setSessionReady(true);
     void loadDashboard(storedToken);
-  }, [loadDashboard]);
+  }, [loadDashboard, router]);
 
   async function submitProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -257,29 +276,10 @@ export function SuperAdminConsole() {
     }
   }
 
-  if (!authenticated) {
+  if (!sessionReady) {
     return (
       <main className="container">
-        <h1>CarryGo Super Admin</h1>
-        <p className="page-subtitle">Login is required before viewing super-admin operations.</p>
-        <LoginForm
-          onLoginSuccess={(payload) => {
-            if (payload.user.role !== "super_admin") {
-              setAuthenticated(false);
-              setOverview(null);
-              setTenants([]);
-              setProfile(null);
-              setAdminUsers([]);
-              setError("This account is not a super admin.");
-              return;
-            }
-
-            setAccessToken(payload.accessToken);
-            void loadDashboard(payload.accessToken);
-          }}
-        />
-        {loading ? <p className="muted">Loading dashboard...</p> : null}
-        {error ? <p className="status-error">{error}</p> : null}
+        <p className="muted">Redirecting to login...</p>
       </main>
     );
   }
@@ -298,15 +298,14 @@ export function SuperAdminConsole() {
         <button
           type="button"
           onClick={() => {
-            localStorage.removeItem("carrygo_access_token");
-            localStorage.removeItem("carrygo_refresh_token");
+            clearClientSession();
             setAccessToken("");
-            setAuthenticated(false);
             setOverview(null);
             setTenants([]);
             setProfile(null);
             setAdminUsers([]);
             setError("");
+            router.push("/super-admin/login");
           }}
         >
           Logout
@@ -428,6 +427,7 @@ export function SuperAdminConsole() {
 
       <section className="card section">
         <h2>Tenants</h2>
+        <p className="muted">Use the view icon to open tenant profile, activity, and edit controls.</p>
         <table className="data-table">
           <thead>
             <tr>
@@ -438,6 +438,7 @@ export function SuperAdminConsole() {
               <th>Trips</th>
               <th>Complaints</th>
               <th>Support Email</th>
+              <th>View</th>
             </tr>
           </thead>
           <tbody>
@@ -450,6 +451,26 @@ export function SuperAdminConsole() {
                 <td>{tenant._count.trips}</td>
                 <td>{tenant._count.complaints}</td>
                 <td>{tenant.supportEmail ?? "-"}</td>
+                <td>
+                  <button
+                    type="button"
+                    onClick={() => router.push(`/super-admin/tenants/${tenant.id}`)}
+                    aria-label={`View ${tenant.name}`}
+                    title="View tenant"
+                  >
+                    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                      <path
+                        d="M2 12c.6-1.2 4.5-7 10-7s9.4 5.8 10 7c-.6 1.2-4.5 7-10 7S2.6 13.2 2 12z"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                      <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" strokeWidth="1.8" />
+                    </svg>
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>

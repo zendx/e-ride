@@ -4,6 +4,8 @@ import { POST as loginPost } from "@/app/(public)/api/auth/login/route";
 import { POST as refreshPost } from "@/app/(public)/api/auth/refresh/route";
 import { PATCH as tenantBrandingPatch } from "@/app/(public)/api/tenant/branding/route";
 import { GET as superAdminTenantsGet, POST as superAdminTenantsPost } from "@/app/(public)/api/super-admin/tenants/route";
+import { PATCH as superAdminTenantPatch } from "@/app/(public)/api/super-admin/tenants/[tenantId]/route";
+import { GET as superAdminTenantInsightsGet } from "@/app/(public)/api/super-admin/tenants/[tenantId]/insights/route";
 
 const {
   loginMock,
@@ -12,7 +14,14 @@ const {
   getAuthContextMock,
   updateTenantBrandingMock,
   tenantFindManyMock,
-  enrollTenantMock
+  enrollTenantMock,
+  tenantFindUniqueMock,
+  tenantUpdateMock,
+  auditCreateMock,
+  riderFindManyMock,
+  passengerFindManyMock,
+  tripFindManyMock,
+  paymentFindManyMock
 } = vi.hoisted(() => ({
   loginMock: vi.fn(),
   refreshMock: vi.fn(),
@@ -20,7 +29,14 @@ const {
   getAuthContextMock: vi.fn(),
   updateTenantBrandingMock: vi.fn(),
   tenantFindManyMock: vi.fn(),
-  enrollTenantMock: vi.fn()
+  enrollTenantMock: vi.fn(),
+  tenantFindUniqueMock: vi.fn(),
+  tenantUpdateMock: vi.fn(),
+  auditCreateMock: vi.fn(),
+  riderFindManyMock: vi.fn(),
+  passengerFindManyMock: vi.fn(),
+  tripFindManyMock: vi.fn(),
+  paymentFindManyMock: vi.fn()
 }));
 
 vi.mock("@/lib/modules/auth/service", () => ({
@@ -47,7 +63,24 @@ vi.mock("@/lib/modules/tenancy/enrollment", () => ({
 vi.mock("@/lib/db", () => ({
   prisma: {
     tenant: {
-      findMany: tenantFindManyMock
+      findMany: tenantFindManyMock,
+      findUnique: tenantFindUniqueMock,
+      update: tenantUpdateMock
+    },
+    riderProfile: {
+      findMany: riderFindManyMock
+    },
+    passengerProfile: {
+      findMany: passengerFindManyMock
+    },
+    trip: {
+      findMany: tripFindManyMock
+    },
+    paymentTransaction: {
+      findMany: paymentFindManyMock
+    },
+    auditLog: {
+      create: auditCreateMock
     }
   }
 }));
@@ -335,5 +368,140 @@ describe("RBAC and tenant isolation API routes", () => {
     expect(response.status).toBe(409);
     const body = await response.json();
     expect(body.error.code).toBe("resource_conflict");
+  });
+
+  it("updates a tenant when called by super_admin", async () => {
+    getAuthContextMock.mockResolvedValue({
+      userId: "u3",
+      role: "super_admin"
+    });
+
+    tenantFindUniqueMock.mockResolvedValue({
+      id: "t1",
+      name: "Alpha Rides",
+      slug: "alpha-rides",
+      appName: "Alpha",
+      status: "active",
+      supportEmail: "support@alpha.com",
+      supportPhone: null,
+      primaryColor: "#0D9488",
+      secondaryColor: "#0F172A",
+      customDomain: null,
+      platformCommissionBps: 1500
+    });
+
+    tenantUpdateMock.mockResolvedValue({
+      id: "t1",
+      name: "Alpha Mobility",
+      slug: "alpha-mobility",
+      status: "active",
+      supportEmail: "ops@alpha.com"
+    });
+
+    const response = await superAdminTenantPatch(
+      new Request("http://localhost/api/super-admin/tenants/t1", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: "Alpha Mobility",
+          slug: "alpha-mobility",
+          supportEmail: "ops@alpha.com"
+        })
+      }) as never,
+      { params: Promise.resolve({ tenantId: "t1" }) }
+    );
+
+    expect(response.status).toBe(200);
+    expect(tenantUpdateMock).toHaveBeenCalledOnce();
+    expect(auditCreateMock).toHaveBeenCalledOnce();
+  });
+
+  it("forbids tenant update for non-super-admin", async () => {
+    getAuthContextMock.mockResolvedValue({
+      userId: "u2",
+      role: "tenant_admin",
+      tenantId: "tenant-a",
+      tenantSlug: "alpha"
+    });
+
+    const response = await superAdminTenantPatch(
+      new Request("http://localhost/api/super-admin/tenants/t1", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: "New Name" })
+      }) as never,
+      { params: Promise.resolve({ tenantId: "t1" }) }
+    );
+
+    expect(response.status).toBe(403);
+    expect(tenantUpdateMock).not.toHaveBeenCalled();
+  });
+
+  it("returns tenant insights to super_admin", async () => {
+    getAuthContextMock.mockResolvedValue({
+      userId: "u3",
+      role: "super_admin"
+    });
+
+    tenantFindUniqueMock.mockResolvedValue({
+      id: "t1",
+      name: "Alpha Rides",
+      slug: "alpha-rides",
+      appName: "Alpha",
+      status: "active",
+      supportEmail: "support@alpha.com",
+      supportPhone: null,
+      customDomain: null,
+      platformCommissionBps: 1500,
+      primaryColor: "#0D9488",
+      secondaryColor: "#0F172A",
+      createdAt: new Date().toISOString(),
+      _count: {
+        users: 10,
+        riders: 4,
+        passengers: 5,
+        trips: 120,
+        transactions: 98,
+        complaints: 2
+      }
+    });
+    riderFindManyMock.mockResolvedValue([{ id: "r1" }]);
+    passengerFindManyMock.mockResolvedValue([{ id: "p1" }]);
+    tripFindManyMock.mockResolvedValue([{ id: "tr1" }]);
+    paymentFindManyMock.mockResolvedValue([{ id: "tx1" }]);
+
+    const response = await superAdminTenantInsightsGet(
+      new Request("http://localhost/api/super-admin/tenants/t1/insights", {
+        method: "GET"
+      }) as never,
+      { params: Promise.resolve({ tenantId: "t1" }) }
+    );
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.data.tenant.id).toBe("t1");
+    expect(body.data.riders).toEqual([{ id: "r1" }]);
+    expect(body.data.passengers).toEqual([{ id: "p1" }]);
+    expect(body.data.tripHistory).toEqual([{ id: "tr1" }]);
+    expect(body.data.transactions).toEqual([{ id: "tx1" }]);
+  });
+
+  it("forbids tenant insights for non-super-admin", async () => {
+    getAuthContextMock.mockResolvedValue({
+      userId: "u2",
+      role: "tenant_admin",
+      tenantId: "tenant-a",
+      tenantSlug: "alpha"
+    });
+
+    const response = await superAdminTenantInsightsGet(
+      new Request("http://localhost/api/super-admin/tenants/t1/insights", {
+        method: "GET"
+      }) as never,
+      { params: Promise.resolve({ tenantId: "t1" }) }
+    );
+
+    expect(response.status).toBe(403);
+    expect(tenantFindUniqueMock).not.toHaveBeenCalled();
   });
 });
