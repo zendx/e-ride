@@ -1,8 +1,9 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { login as loginApi, registerPushToken } from "../lib/api";
+import { login as loginApi, refreshAccessToken, registerPushToken } from "../lib/api";
 import { clearSession, loadSession, saveSession } from "../lib/storage";
 import { AppRole, AuthSession } from "../types/auth";
 import { Platform } from "react-native";
+import { getConfiguredTenantSlug } from "../lib/tenant";
 
 type AuthContextValue = {
   loading: boolean;
@@ -12,6 +13,20 @@ type AuthContextValue = {
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+const APP_TENANT_SLUG = getConfiguredTenantSlug();
+
+function normalizeSlug(value?: string | null) {
+  return (value ?? "").trim().toLowerCase();
+}
+
+function ensureTenantMatch(tenantSlug?: string | null) {
+  if (!APP_TENANT_SLUG) {
+    throw new Error("Tenant configuration missing. Set EXPO_PUBLIC_TENANT_SLUG for this app build.");
+  }
+  if (normalizeSlug(tenantSlug) !== APP_TENANT_SLUG) {
+    throw new Error(`This app is restricted to tenant "${APP_TENANT_SLUG}".`);
+  }
+}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
@@ -21,8 +36,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let mounted = true;
     (async () => {
       const stored = await loadSession();
+      let nextSession: AuthSession | null = stored;
+      if (stored) {
+        try {
+          ensureTenantMatch(stored.user.tenantSlug);
+          const refreshedAccessToken = await refreshAccessToken(stored.refreshToken);
+          nextSession = {
+            ...stored,
+            accessToken: refreshedAccessToken
+          };
+          await saveSession(nextSession);
+        } catch {
+          await clearSession();
+          nextSession = null;
+        }
+      }
       if (mounted) {
-        setSession(stored);
+        setSession(nextSession);
         setLoading(false);
       }
     })();
@@ -31,8 +61,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  useEffect(() => {
+    if (!session) return;
+    const timer = setInterval(() => {
+      void (async () => {
+        try {
+          const refreshedAccessToken = await refreshAccessToken(session.refreshToken);
+          const refreshedSession: AuthSession = {
+            ...session,
+            accessToken: refreshedAccessToken
+          };
+          await saveSession(refreshedSession);
+          setSession(refreshedSession);
+        } catch {
+          await clearSession();
+          setSession(null);
+        }
+      })();
+    }, 10 * 60 * 1000);
+
+    return () => clearInterval(timer);
+  }, [session]);
+
   async function login(email: string, password: string, expectedRole?: AppRole) {
-    const payload = await loginApi(email, password);
+    const payload = await loginApi(email, password, APP_TENANT_SLUG);
     const roleLabel = (role: AppRole) => (role === "rider" ? "Driver" : "Rider");
     if (payload.user.role !== "rider" && payload.user.role !== "passenger") {
       throw new Error("Only Driver or Rider accounts can use this mobile app.");
@@ -40,6 +92,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (expectedRole && payload.user.role !== expectedRole) {
       throw new Error(`This account is not a ${roleLabel(expectedRole)} account.`);
     }
+    ensureTenantMatch(payload.user.tenantSlug);
 
     const nextSession: AuthSession = {
       accessToken: payload.accessToken,

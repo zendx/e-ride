@@ -104,12 +104,14 @@ export function TenantDetailConsole({ tenantId }: { tenantId: string }) {
     email: "",
     newPassword: ""
   });
+  const [tenantFormInitialized, setTenantFormInitialized] = useState(false);
+  const [credentialsFormInitialized, setCredentialsFormInitialized] = useState(false);
 
-  const loadInsights = useCallback(async (rawToken: string) => {
+  const loadInsights = useCallback(async (rawToken: string, options?: { silent?: boolean; syncForms?: boolean }) => {
     const token = normalizeToken(rawToken);
     if (!token) return;
 
-    setLoading(true);
+    if (!options?.silent) setLoading(true);
     setError("");
 
     try {
@@ -132,31 +134,37 @@ export function TenantDetailConsole({ tenantId }: { tenantId: string }) {
 
       const body = (await response.json()) as { data: TenantInsights };
       setInsights(body.data);
-      setTenantForm({
-        name: body.data.tenant.name,
-        slug: body.data.tenant.slug,
-        status: body.data.tenant.status,
-        appName: body.data.tenant.appName,
-        supportEmail: body.data.tenant.supportEmail ?? "",
-        supportPhone: body.data.tenant.supportPhone ?? "",
-        customDomain: body.data.tenant.customDomain ?? "",
-        primaryColor: body.data.tenant.primaryColor,
-        secondaryColor: body.data.tenant.secondaryColor,
-        platformCommissionBps: body.data.tenant.platformCommissionBps
-      });
-      const selectedAdmin = body.data.tenantAdmins[0];
-      setCredentialsForm({
-        adminUserId: selectedAdmin?.id ?? "",
-        email: selectedAdmin?.email ?? "",
-        newPassword: ""
-      });
+      if (options?.syncForms || !tenantFormInitialized) {
+        setTenantForm({
+          name: body.data.tenant.name,
+          slug: body.data.tenant.slug,
+          status: body.data.tenant.status,
+          appName: body.data.tenant.appName,
+          supportEmail: body.data.tenant.supportEmail ?? "",
+          supportPhone: body.data.tenant.supportPhone ?? "",
+          customDomain: body.data.tenant.customDomain ?? "",
+          primaryColor: body.data.tenant.primaryColor,
+          secondaryColor: body.data.tenant.secondaryColor,
+          platformCommissionBps: body.data.tenant.platformCommissionBps
+        });
+        setTenantFormInitialized(true);
+      }
+      if (options?.syncForms || !credentialsFormInitialized) {
+        const selectedAdmin = body.data.tenantAdmins[0];
+        setCredentialsForm({
+          adminUserId: selectedAdmin?.id ?? "",
+          email: selectedAdmin?.email ?? "",
+          newPassword: ""
+        });
+        setCredentialsFormInitialized(true);
+      }
     } catch {
       setError("Network error while loading tenant details.");
       setInsights(null);
     } finally {
-      setLoading(false);
+      if (!options?.silent) setLoading(false);
     }
-  }, [router, tenantId]);
+  }, [credentialsFormInitialized, router, tenantFormInitialized, tenantId]);
 
   useEffect(() => {
     const storedToken = getStoredAccessToken();
@@ -176,7 +184,7 @@ export function TenantDetailConsole({ tenantId }: { tenantId: string }) {
 
     setAccessToken(storedToken);
     setSessionReady(true);
-    void loadInsights(storedToken);
+    void loadInsights(storedToken, { syncForms: true });
   }, [loadInsights, router]);
 
   useEffect(() => {
@@ -193,10 +201,10 @@ export function TenantDetailConsole({ tenantId }: { tenantId: string }) {
 
     const handleReady = () => {
       setStreamState("live");
-      void loadInsights(token);
+      void loadInsights(token, { silent: true });
     };
     const handleUpdate = () => {
-      void loadInsights(token);
+      void loadInsights(token, { silent: true });
     };
 
     eventSource.addEventListener("ready", handleReady);
@@ -219,9 +227,9 @@ export function TenantDetailConsole({ tenantId }: { tenantId: string }) {
     const token = normalizeToken(accessToken);
     if (!token || streamState !== "fallback") return;
 
-    void loadInsights(token);
+    void loadInsights(token, { silent: true });
     const interval = setInterval(() => {
-      void loadInsights(token);
+      void loadInsights(token, { silent: true });
     }, 15000);
 
     return () => clearInterval(interval);
@@ -262,7 +270,8 @@ export function TenantDetailConsole({ tenantId }: { tenantId: string }) {
       }
 
       setTenantResult({ ok: true, message: "Tenant updated successfully." });
-      await loadInsights(token);
+      setTenantFormInitialized(false);
+      await loadInsights(token, { silent: true, syncForms: true });
     } catch {
       setTenantResult({ ok: false, message: "Network error while updating tenant." });
     }
@@ -299,7 +308,8 @@ export function TenantDetailConsole({ tenantId }: { tenantId: string }) {
 
       setCredentialsResult({ ok: true, message: "Tenant admin credentials updated successfully." });
       setCredentialsForm((current) => ({ ...current, newPassword: "" }));
-      await loadInsights(token);
+      setCredentialsFormInitialized(false);
+      await loadInsights(token, { silent: true, syncForms: true });
     } catch {
       setCredentialsResult({ ok: false, message: "Network error while updating credentials." });
     }

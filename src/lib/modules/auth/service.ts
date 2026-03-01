@@ -12,7 +12,7 @@ function isDatabaseUnavailableError(error: unknown) {
   );
 }
 
-export async function login(email: string, password: string) {
+export async function login(email: string, password: string, tenantSlug?: string) {
   try {
     const user = await prisma.user.findUnique({
       where: { email },
@@ -23,6 +23,9 @@ export async function login(email: string, password: string) {
 
     const valid = await verifyPassword(password, user.passwordHash);
     if (!valid) throw new AppError("Invalid credentials", 401, "invalid_credentials");
+    if (tenantSlug && user.tenant?.slug !== tenantSlug) {
+      throw new AppError(`This account does not belong to tenant "${tenantSlug}".`, 403, "tenant_scope_mismatch");
+    }
 
     const payload = {
       sub: user.id,

@@ -55,6 +55,7 @@ export async function GET(request: NextRequest) {
     todayStart.setHours(0, 0, 0, 0);
 
     const [
+      tenant,
       summary,
       activeTrips,
       riders,
@@ -73,6 +74,13 @@ export async function GET(request: NextRequest) {
       geofenceAlerts,
       analyticsSnapshots
     ] = await Promise.all([
+      safe(
+        () => prisma.tenant.findUnique({
+          where: { id: auth.tenantId },
+          select: { id: true, name: true, slug: true }
+        }),
+        null
+      ),
       safe(
         () =>
           Promise.all([
@@ -472,6 +480,7 @@ export async function GET(request: NextRequest) {
     }));
 
     return ok({
+      tenant,
       summary,
       activeTrips,
       riders,

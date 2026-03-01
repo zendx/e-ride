@@ -18,12 +18,13 @@ import { useAuth } from "../state/auth-context";
 import { API_BASE_URL } from "../lib/config";
 import { AppRole } from "../types/auth";
 import { FlowButton, FlowCard, FlowPage, FlowSubtitle, FlowTitle, flowColors } from "../components/core-flow-ui";
+import { getConfiguredTenantSlug } from "../lib/tenant";
 
 export function LoginScreen({ initialRole = "passenger" }: { initialRole?: AppRole }) {
   const { login, loading } = useAuth();
   const selectedRole = initialRole;
   const roleLabel = selectedRole === "rider" ? "Driver" : "Rider";
-  const configuredTenantSlug = (process.env.EXPO_PUBLIC_TENANT_SLUG ?? "").trim().toLowerCase();
+  const configuredTenantSlug = getConfiguredTenantSlug();
 
   const [mode, setMode] = useState<"login" | "register">("login");
   const [registrationSubmitted, setRegistrationSubmitted] = useState(false);
@@ -77,7 +78,7 @@ export function LoginScreen({ initialRole = "passenger" }: { initialRole?: AppRo
         }
         const effectiveTenantSlug = configuredTenantSlug;
         if (!effectiveTenantSlug) {
-          throw new Error("Tenant slug configuration is missing. Set EXPO_PUBLIC_TENANT_SLUG.");
+          throw new Error("Registration is unavailable until EXPO_PUBLIC_TENANT_SLUG is set for this app build.");
         }
 
         if (selectedRole === "rider") {
@@ -120,7 +121,14 @@ export function LoginScreen({ initialRole = "passenger" }: { initialRole?: AppRo
         setMessage("Enrollment submitted.");
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to continue.");
+      const nextError = err instanceof Error ? err.message : "Unable to continue.";
+      if (mode === "register" && /email already exists/i.test(nextError)) {
+        setMode("login");
+        setMessage("Account already exists. Please log in with this email.");
+        setError("");
+      } else {
+        setError(nextError);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -180,7 +188,7 @@ export function LoginScreen({ initialRole = "passenger" }: { initialRole?: AppRo
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.keyboard}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <View style={styles.header}>
-            <Text style={styles.brand}>CarryGo</Text>
+            <Text style={styles.brand}>Cyber Rydes</Text>
             <View style={styles.roleBadge}>
               <Text style={styles.roleBadgeText}>{roleLabel}</Text>
             </View>

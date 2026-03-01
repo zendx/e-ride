@@ -8,7 +8,9 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "build:cyber-rydes:android": "eas build --platform android --profile cyber-rydes",
+    "build:cyber-rydes:ios": "eas build --platform ios --profile cyber-rydes"
   },
   "dependencies": {
     "@expo-google-fonts/poppins": "^0.4.1",

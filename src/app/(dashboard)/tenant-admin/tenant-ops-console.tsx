@@ -6,6 +6,11 @@ import { clearClientSession, getRoleFromAccessToken, getStoredAccessToken } from
 
 type MonitoringResponse = {
   data: {
+    tenant: {
+      id: string;
+      name: string;
+      slug: string;
+    } | null;
     summary: {
       onlineRiders: number;
       totalRiders: number;
@@ -179,6 +184,8 @@ type ErrorResponse = {
 };
 
 const STATUS_FILTERS = ["all", "requested", "assigned", "accepted", "arrived", "in_progress", "completed", "cancelled"] as const;
+const POLL_INTERVAL_MS = 8000;
+const STREAM_RETRY_MS = 3000;
 
 export function TenantOpsConsole() {
   const router = useRouter();
@@ -190,6 +197,7 @@ export function TenantOpsConsole() {
   const [snapshot, setSnapshot] = useState<MonitoringResponse["data"] | null>(null);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<string>("");
   const [streamState, setStreamState] = useState<"connecting" | "live" | "fallback">("connecting");
+  const [streamRetryTick, setStreamRetryTick] = useState(0);
   const [approveResult, setApproveResult] = useState<{ ok: boolean; message: string } | null>(null);
   const [enrollmentResult, setEnrollmentResult] = useState<{ ok: boolean; message: string } | null>(null);
 
@@ -260,14 +268,21 @@ export function TenantOpsConsole() {
   useEffect(() => {
     if (!accessToken.trim()) return;
     setStreamState("connecting");
+    setStreamRetryTick(0);
   }, [accessToken, query]);
 
   useEffect(() => {
+    if (!accessToken.trim()) return;
+    void loadData();
+  }, [accessToken, loadData, query]);
+
+  useEffect(() => {
     const token = accessToken.trim();
-    if (!token || streamState === "fallback") return;
+    if (!token) return;
 
     const eventSource = new EventSource(`/api/tenant/monitoring/stream?accessToken=${encodeURIComponent(token)}`);
     let closed = false;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
     const handleReady = () => {
       setStreamState("live");
@@ -283,24 +298,29 @@ export function TenantOpsConsole() {
       if (closed) return;
       setStreamState("fallback");
       eventSource.close();
+      reconnectTimer = setTimeout(() => {
+        setStreamState("connecting");
+        setStreamRetryTick((current) => current + 1);
+      }, STREAM_RETRY_MS);
     };
 
     return () => {
       closed = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
       eventSource.removeEventListener("ready", handleReady);
       eventSource.removeEventListener("tenant_event", handleTenantEvent);
       eventSource.close();
     };
-  }, [accessToken, loadData, streamState]);
+  }, [accessToken, loadData, query, streamRetryTick]);
 
   useEffect(() => {
-    if (!accessToken.trim() || streamState !== "fallback") return;
+    if (!accessToken.trim()) return;
     void loadData();
     const interval = setInterval(() => {
       void loadData();
-    }, 8000);
+    }, POLL_INTERVAL_MS);
     return () => clearInterval(interval);
-  }, [accessToken, loadData, streamState]);
+  }, [accessToken, loadData, query]);
 
   async function approveRider(riderId: string) {
     if (!accessToken.trim()) return;
@@ -376,12 +396,13 @@ export function TenantOpsConsole() {
   return (
     <section className="card section">
       <h2>Live Operations Console</h2>
+      {snapshot?.tenant ? <p className="muted">Tenant: {snapshot.tenant.name} ({snapshot.tenant.slug})</p> : null}
       <p className="muted">
         {streamState === "live"
           ? "Live updates via SSE stream."
           : streamState === "connecting"
             ? "Connecting to live stream..."
-            : "Stream unavailable. Using 8s polling fallback."}
+            : "Stream unavailable. Reconnecting automatically while 8s polling keeps data current."}
       </p>
 
       <div className="form-grid">

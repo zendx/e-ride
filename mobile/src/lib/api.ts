@@ -27,6 +27,10 @@ function sleep(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms));
 }
 
+function networkErrorMessage() {
+  return `Network error reaching ${API_BASE_URL}. Check your connection and API base URL.`;
+}
+
 async function apiRequest(url: string, init?: RequestInit, options?: ApiRequestOptions) {
   const method = (init?.method ?? "GET").toUpperCase();
   const retries = options?.retries ?? (method === "GET" ? API_GET_RETRIES : 0);
@@ -53,18 +57,18 @@ async function apiRequest(url: string, init?: RequestInit, options?: ApiRequestO
         continue;
       }
       if (isAbortError(error)) {
-        throw new Error("Request timed out. Please try again.");
+        throw new Error(`Request timed out while contacting ${API_BASE_URL}.`);
       }
-      throw new Error("Network error. Check your connection and try again.");
+      throw new Error(networkErrorMessage());
     } finally {
       clearTimeout(timeout);
     }
   }
 
   if (isAbortError(networkError)) {
-    throw new Error("Request timed out. Please try again.");
+    throw new Error(`Request timed out while contacting ${API_BASE_URL}.`);
   }
-  throw new Error("Network error. Check your connection and try again.");
+  throw new Error(networkErrorMessage());
 }
 
 async function parseError(response: Response, fallback: string) {
@@ -76,11 +80,11 @@ async function parseError(response: Response, fallback: string) {
   }
 }
 
-export async function login(email: string, password: string) {
+export async function login(email: string, password: string, tenantSlug?: string) {
   const response = await apiRequest(withBase("/api/auth/login"), {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ email, password })
+    body: JSON.stringify({ email, password, tenantSlug })
   });
 
   if (!response.ok) {
@@ -89,6 +93,21 @@ export async function login(email: string, password: string) {
 
   const body = (await response.json()) as { data: LoginPayload };
   return body.data;
+}
+
+export async function refreshAccessToken(refreshToken: string) {
+  const response = await apiRequest(withBase("/api/auth/refresh"), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ refreshToken })
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseError(response, `Token refresh failed (${response.status})`));
+  }
+
+  const body = (await response.json()) as { data: { accessToken: string } };
+  return body.data.accessToken;
 }
 
 export async function registerRider(payload: {

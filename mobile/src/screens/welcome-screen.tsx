@@ -14,7 +14,7 @@ export function WelcomeScreen({ onContinue }: WelcomeScreenProps) {
     <View style={styles.container}>
       <View style={styles.mapTint} />
       <View style={styles.topBar}>
-        <Text style={styles.logo}>CarryGo</Text>
+        <Text style={styles.logo}>Cyber Rydes</Text>
         <View style={styles.avatarDot} />
       </View>
       <View style={styles.sheet}>

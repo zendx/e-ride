@@ -9,11 +9,13 @@ import { AppRole } from "../types/auth";
 type ProfileSettingsScreenProps = {
   accessToken: string;
   role: AppRole;
+  userEmail: string;
   onLogout: () => Promise<void>;
   notice?: string;
 };
 
-export function ProfileSettingsScreen({ accessToken, role, onLogout, notice }: ProfileSettingsScreenProps) {
+export function ProfileSettingsScreen({ accessToken, role, userEmail, onLogout, notice }: ProfileSettingsScreenProps) {
+  const [activePanel, setActivePanel] = useState<"profile" | "settings">("profile");
   const [profileName, setProfileName] = useState("");
   const [profilePhone, setProfilePhone] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<"card" | "wallet" | "cash">("card");
@@ -94,32 +96,57 @@ export function ProfileSettingsScreen({ accessToken, role, onLogout, notice }: P
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>Profile & Settings</Text>
+      <Text style={styles.title}>Account</Text>
       <Text style={styles.subtitle}>Role: {role === "rider" ? "Driver" : "Rider"}</Text>
       <NoticeBanner tone="warning" message={notice} />
+      <View style={styles.row}>
+        <TouchableOpacity
+          style={[styles.button, activePanel === "profile" ? styles.button : styles.ghostButton]}
+          onPress={() => setActivePanel("profile")}
+        >
+          <Text style={activePanel === "profile" ? styles.buttonText : styles.ghostButtonText}>Profile</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.button, activePanel === "settings" ? styles.button : styles.ghostButton]}
+          onPress={() => setActivePanel("settings")}
+        >
+          <Text style={activePanel === "settings" ? styles.buttonText : styles.ghostButtonText}>Settings</Text>
+        </TouchableOpacity>
+      </View>
       <View style={styles.card}>
-        <TextInput style={styles.input} value={profileName} onChangeText={setProfileName} placeholder="Full name" />
-        <TextInput style={styles.input} value={profilePhone} onChangeText={setProfilePhone} placeholder="Phone number" />
-        <View style={styles.row}>
-          {(["card", "wallet", "cash"] as const).map((method) => (
-            <TouchableOpacity key={method} style={[styles.pill, paymentMethod === method && styles.pillActive]} onPress={() => setPaymentMethod(method)}>
-              <Text style={paymentMethod === method ? styles.pillTextActive : styles.pillText}>{method}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-        <View style={styles.row}>
-          <TouchableOpacity style={[styles.pill, rideRequests && styles.pillActive]} onPress={() => setRideRequests((current) => !current)}>
-            <Text style={rideRequests ? styles.pillTextActive : styles.pillText}>Ride Requests</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.pill, rideUpdates && styles.pillActive]} onPress={() => setRideUpdates((current) => !current)}>
-            <Text style={rideUpdates ? styles.pillTextActive : styles.pillText}>Ride Updates</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.pill, promotions && styles.pillActive]} onPress={() => setPromotions((current) => !current)}>
-            <Text style={promotions ? styles.pillTextActive : styles.pillText}>Promotions</Text>
-          </TouchableOpacity>
-        </View>
+        {activePanel === "profile" ? (
+          <>
+            <TextInput style={styles.input} value={profileName} onChangeText={setProfileName} placeholder="Full name" />
+            <TextInput style={styles.input} value={profilePhone} onChangeText={setProfilePhone} placeholder="Phone number" />
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Email</Text>
+              <Text style={styles.infoValue}>{userEmail}</Text>
+            </View>
+          </>
+        ) : (
+          <>
+            <View style={styles.row}>
+              {(["card", "wallet", "cash"] as const).map((method) => (
+                <TouchableOpacity key={method} style={[styles.pill, paymentMethod === method && styles.pillActive]} onPress={() => setPaymentMethod(method)}>
+                  <Text style={paymentMethod === method ? styles.pillTextActive : styles.pillText}>{method}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <View style={styles.row}>
+              <TouchableOpacity style={[styles.pill, rideRequests && styles.pillActive]} onPress={() => setRideRequests((current) => !current)}>
+                <Text style={rideRequests ? styles.pillTextActive : styles.pillText}>Ride Requests</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.pill, rideUpdates && styles.pillActive]} onPress={() => setRideUpdates((current) => !current)}>
+                <Text style={rideUpdates ? styles.pillTextActive : styles.pillText}>Ride Updates</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.pill, promotions && styles.pillActive]} onPress={() => setPromotions((current) => !current)}>
+                <Text style={promotions ? styles.pillTextActive : styles.pillText}>Promotions</Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
         <TouchableOpacity style={styles.button} onPress={() => void saveSettings()}>
-          <Text style={styles.buttonText}>Save</Text>
+          <Text style={styles.buttonText}>{activePanel === "profile" ? "Save Profile" : "Save Settings"}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.ghostButton} onPress={() => void onLogout()}>
           <Text style={styles.ghostButtonText}>Logout</Text>
@@ -164,6 +191,22 @@ const styles = StyleSheet.create({
   sectionLabel: {
     fontWeight: "700",
     color: "#0f1f33"
+  },
+  infoRow: {
+    borderWidth: 1,
+    borderColor: "#d8e1ee",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 4
+  },
+  infoLabel: {
+    color: "#5a6f8a",
+    fontSize: 12
+  },
+  infoValue: {
+    color: "#0f1f33",
+    fontWeight: "600"
   },
   pill: {
     borderWidth: 1,

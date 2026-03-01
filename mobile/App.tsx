@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { SafeAreaView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { useFonts } from "expo-font";
 import { Poppins_400Regular, Poppins_500Medium, Poppins_600SemiBold, Poppins_700Bold } from "@expo-google-fonts/poppins";
+import { Ionicons } from "@expo/vector-icons";
 import { AuthProvider, useAuth } from "./src/state/auth-context";
 import { LoginScreen } from "./src/screens/login-screen";
 import { RiderHomeScreen } from "./src/screens/rider-home-screen";
@@ -29,24 +30,9 @@ function AppContent() {
     return () => clearTimeout(timer);
   }, []);
 
-  if (!session) {
-    if (showSplash) return <SplashScreen />;
-    if (!started) {
-      return (
-        <WelcomeScreen
-          onContinue={(role) => {
-            setSelectedRole(role);
-            setStarted(true);
-          }}
-        />
-      );
-    }
-
-    return <LoginScreen initialRole={selectedRole} />;
-  }
-
-  const role = session.user.role;
+  const role = session?.user.role;
   const tabContent = useMemo(() => {
+    if (!session || !role) return null;
     if (activeTab === "home") {
       if (role === "rider") {
         return (
@@ -90,29 +76,54 @@ function AppContent() {
       <ProfileSettingsScreen
         accessToken={session.accessToken}
         role={role}
+        userEmail={session.user.email}
         onLogout={logout}
         notice={profileNotice}
       />
     );
-  }, [activeTab, logout, profileNotice, role, session.accessToken]);
+  }, [activeTab, logout, profileNotice, role, session]);
+
+  if (!session) {
+    if (showSplash) return <SplashScreen />;
+    if (!started) {
+      return (
+        <WelcomeScreen
+          onContinue={(nextRole) => {
+            setSelectedRole(nextRole);
+            setStarted(true);
+          }}
+        />
+      );
+    }
+
+    return <LoginScreen initialRole={selectedRole} />;
+  }
 
   return (
     <View style={styles.appContainer}>
       <View style={styles.content}>{tabContent}</View>
       <View style={styles.tabBar}>
-        <TabButton label="Home" active={activeTab === "home"} onPress={() => setActiveTab("home")} />
-        <TabButton label="Help" active={activeTab === "help"} onPress={() => setActiveTab("help")} />
-        <TabButton label="Receipts" active={activeTab === "receipts"} onPress={() => setActiveTab("receipts")} />
-        <TabButton label="Profile" active={activeTab === "profile"} onPress={() => setActiveTab("profile")} />
+        <TabButton icon="home" active={activeTab === "home"} onPress={() => setActiveTab("home")} />
+        <TabButton icon="help-circle" active={activeTab === "help"} onPress={() => setActiveTab("help")} />
+        <TabButton icon="receipt" active={activeTab === "receipts"} onPress={() => setActiveTab("receipts")} />
+        <TabButton icon="person" active={activeTab === "profile"} onPress={() => setActiveTab("profile")} />
       </View>
     </View>
   );
 }
 
-function TabButton({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
+function TabButton({
+  icon,
+  active,
+  onPress
+}: {
+  icon: "home" | "help-circle" | "receipt" | "person";
+  active: boolean;
+  onPress: () => void;
+}) {
   return (
     <TouchableOpacity style={[styles.tabButton, active && styles.tabButtonActive]} onPress={onPress}>
-      <Text style={active ? styles.tabTextActive : styles.tabText}>{label}</Text>
+      <Ionicons name={active ? icon : `${icon}-outline`} size={22} color={active ? "#fff" : flowColors.ink} />
     </TouchableOpacity>
   );
 }
@@ -144,7 +155,11 @@ export default function App() {
   return (
     <AuthProvider>
       <SafeAreaView style={styles.safeArea}>
-        <StatusBar barStyle="dark-content" />
+        <StatusBar
+          barStyle="dark-content"
+          translucent={false}
+          backgroundColor={flowColors.page}
+        />
         <AppContent />
       </SafeAreaView>
     </AuthProvider>
@@ -176,22 +191,16 @@ const styles = StyleSheet.create({
   },
   tabButton: {
     flex: 1,
-    borderRadius: 10,
+    height: 44,
+    borderRadius: 22,
     borderWidth: 1,
     borderColor: flowColors.border,
-    paddingVertical: 10,
     alignItems: "center"
+    ,
+    justifyContent: "center"
   },
   tabButtonActive: {
     backgroundColor: flowColors.primary,
     borderColor: flowColors.primary
-  },
-  tabText: {
-    color: flowColors.ink,
-    fontWeight: "600"
-  },
-  tabTextActive: {
-    color: "#fff",
-    fontWeight: "700"
   }
 });

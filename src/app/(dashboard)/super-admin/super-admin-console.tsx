@@ -73,6 +73,7 @@ export function SuperAdminConsole() {
   const [tenants, setTenants] = useState<TenantRow[]>([]);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]);
+  const [profileFormInitialized, setProfileFormInitialized] = useState(false);
 
   const [profileForm, setProfileForm] = useState({
     fullName: "",
@@ -90,7 +91,7 @@ export function SuperAdminConsole() {
   });
   const [adminResult, setAdminResult] = useState<{ ok: boolean; message: string } | null>(null);
 
-  const loadDashboard = useCallback(async (rawToken: string) => {
+  const loadDashboard = useCallback(async (rawToken: string, options?: { silent?: boolean; syncProfileForm?: boolean }) => {
     const token = normalizeToken(rawToken);
     if (!token) {
       setSessionReady(false);
@@ -103,7 +104,7 @@ export function SuperAdminConsole() {
       return;
     }
 
-    setLoading(true);
+    if (!options?.silent) setLoading(true);
     setError("");
 
     try {
@@ -167,7 +168,10 @@ export function SuperAdminConsole() {
       if (profileResult?.body && typeof profileResult.body === "object" && "data" in profileResult.body) {
         const data = (profileResult.body as { data: Profile }).data;
         setProfile(data);
-        setProfileForm((current) => ({ ...current, fullName: data.fullName, email: data.email }));
+        if (options?.syncProfileForm || !profileFormInitialized) {
+          setProfileForm((current) => ({ ...current, fullName: data.fullName, email: data.email }));
+          setProfileFormInitialized(true);
+        }
       }
 
       const adminUsersResult = results.find((result) => result.request.key === "admin-users" && result.response.ok);
@@ -177,9 +181,9 @@ export function SuperAdminConsole() {
     } catch {
       setError("Network error while loading super-admin data.");
     } finally {
-      setLoading(false);
+      if (!options?.silent) setLoading(false);
     }
-  }, [router]);
+  }, [profileFormInitialized, router]);
 
   useEffect(() => {
     const storedToken = getStoredAccessToken();
@@ -199,7 +203,7 @@ export function SuperAdminConsole() {
 
     setAccessToken(storedToken);
     setSessionReady(true);
-    void loadDashboard(storedToken);
+    void loadDashboard(storedToken, { syncProfileForm: true });
   }, [loadDashboard, router]);
 
   useEffect(() => {
@@ -216,10 +220,10 @@ export function SuperAdminConsole() {
 
     const handleReady = () => {
       setStreamState("live");
-      void loadDashboard(token);
+      void loadDashboard(token, { silent: true });
     };
     const handleUpdate = () => {
-      void loadDashboard(token);
+      void loadDashboard(token, { silent: true });
     };
 
     eventSource.addEventListener("ready", handleReady);
@@ -242,9 +246,9 @@ export function SuperAdminConsole() {
     const token = normalizeToken(accessToken);
     if (!token || streamState !== "fallback") return;
 
-    void loadDashboard(token);
+    void loadDashboard(token, { silent: true });
     const interval = setInterval(() => {
-      void loadDashboard(token);
+      void loadDashboard(token, { silent: true });
     }, 15000);
 
     return () => clearInterval(interval);
@@ -283,7 +287,8 @@ export function SuperAdminConsole() {
 
       setProfileForm((current) => ({ ...current, currentPassword: "", newPassword: "" }));
       setProfileResult({ ok: true, message: "Profile updated successfully." });
-      await loadDashboard(token);
+      setProfileFormInitialized(false);
+      await loadDashboard(token, { silent: true, syncProfileForm: true });
     } catch {
       setProfileResult({ ok: false, message: "Network error while updating profile." });
     }
@@ -319,7 +324,7 @@ export function SuperAdminConsole() {
 
       setAdminForm({ fullName: "", email: "", password: "", role: "support" });
       setAdminResult({ ok: true, message: "Admin user created successfully." });
-      await loadDashboard(token);
+      await loadDashboard(token, { silent: true });
     } catch {
       setAdminResult({ ok: false, message: "Network error while creating admin user." });
     }

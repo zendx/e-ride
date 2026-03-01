@@ -10,7 +10,7 @@ export async function POST(request: Request) {
 
     const body = await request.json();
     const input = loginSchema.parse(body);
-    const result = await login(input.email, input.password);
+    const result = await login(input.email, input.password, input.tenantSlug);
     return ok(result);
   } catch (error) {
     return fail(error);

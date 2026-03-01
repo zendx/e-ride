@@ -25,6 +25,7 @@ export default function TenantAdminLoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [tenantSlug, setTenantSlug] = useState("cyber-rydes");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -45,7 +46,7 @@ export default function TenantAdminLoginPage() {
       const response = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ email, password })
+        body: JSON.stringify({ email, password, tenantSlug })
       });
 
       if (!response.ok) {
@@ -76,6 +77,16 @@ export default function TenantAdminLoginPage() {
 
       <section className="card section">
         <form className="form-grid" onSubmit={onSubmit}>
+          <label>
+            Tenant Slug
+            <input
+              type="text"
+              value={tenantSlug}
+              onChange={(event) => setTenantSlug(event.target.value.trim().toLowerCase())}
+              placeholder="cyber-rydes"
+              required
+            />
+          </label>
           <label>
             Email
             <input
