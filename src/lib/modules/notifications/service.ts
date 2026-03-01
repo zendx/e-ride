@@ -11,7 +11,7 @@ type NotificationInput = {
 
 type NotificationResult = NotificationInput & {
   success: true;
-  provider: "log" | "resend";
+  provider: "log" | "resend" | "expo";
   providerMessageId: string;
 };
 
@@ -89,9 +89,49 @@ const resendProvider: NotificationProvider = {
   }
 };
 
+const expoPushProvider: NotificationProvider = {
+  async send(input) {
+    if (input.channel !== "push") {
+      throw new AppError("Expo provider supports push notifications only", 400, "notification_channel_unsupported");
+    }
+
+    const response = await fetch("https://exp.host/--/api/v2/push/send", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        to: input.to,
+        title: input.subject ?? "CarryGo",
+        body: input.message,
+        data: { source: "carrygo" }
+      })
+    });
+
+    if (!response.ok) {
+      const responseText = await response.text();
+      throw new AppError("Notification provider request failed", 502, "notification_provider_error", {
+        provider: "expo",
+        status: response.status,
+        body: responseText
+      });
+    }
+
+    const body = (await response.json()) as { data?: { id?: string } };
+
+    return {
+      success: true,
+      provider: "expo",
+      providerMessageId: body.data?.id ?? randomUUID(),
+      ...input
+    };
+  }
+};
+
 function getNotificationProvider(): NotificationProvider {
   const provider = (process.env.NOTIFICATION_PROVIDER ?? "log").toLowerCase();
   if (provider === "resend") return resendProvider;
+  if (provider === "expo") return expoPushProvider;
   return logProvider;
 }
 

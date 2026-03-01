@@ -68,6 +68,7 @@ export function SuperAdminConsole() {
   const [sessionReady, setSessionReady] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [streamState, setStreamState] = useState<"connecting" | "live" | "fallback">("connecting");
   const [overview, setOverview] = useState<SuperAdminOverview | null>(null);
   const [tenants, setTenants] = useState<TenantRow[]>([]);
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -201,6 +202,54 @@ export function SuperAdminConsole() {
     void loadDashboard(storedToken);
   }, [loadDashboard, router]);
 
+  useEffect(() => {
+    if (!accessToken.trim()) return;
+    setStreamState("connecting");
+  }, [accessToken]);
+
+  useEffect(() => {
+    const token = normalizeToken(accessToken);
+    if (!token || streamState === "fallback") return;
+
+    const eventSource = new EventSource(`/api/super-admin/dashboard/stream?accessToken=${encodeURIComponent(token)}`);
+    let closed = false;
+
+    const handleReady = () => {
+      setStreamState("live");
+      void loadDashboard(token);
+    };
+    const handleUpdate = () => {
+      void loadDashboard(token);
+    };
+
+    eventSource.addEventListener("ready", handleReady);
+    eventSource.addEventListener("superadmin_event", handleUpdate);
+    eventSource.onerror = () => {
+      if (closed) return;
+      setStreamState("fallback");
+      eventSource.close();
+    };
+
+    return () => {
+      closed = true;
+      eventSource.removeEventListener("ready", handleReady);
+      eventSource.removeEventListener("superadmin_event", handleUpdate);
+      eventSource.close();
+    };
+  }, [accessToken, loadDashboard, streamState]);
+
+  useEffect(() => {
+    const token = normalizeToken(accessToken);
+    if (!token || streamState !== "fallback") return;
+
+    void loadDashboard(token);
+    const interval = setInterval(() => {
+      void loadDashboard(token);
+    }, 15000);
+
+    return () => clearInterval(interval);
+  }, [accessToken, loadDashboard, streamState]);
+
   async function submitProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setProfileResult(null);
@@ -288,6 +337,13 @@ export function SuperAdminConsole() {
     <main className="container">
       <h1>CarryGo Super Admin</h1>
       <p className="page-subtitle">Platform controls for tenants, administrators, and operational oversight.</p>
+      <p className="muted">
+        {streamState === "live"
+          ? "Live updates via SSE stream."
+          : streamState === "connecting"
+            ? "Connecting to live stream..."
+            : "Stream unavailable. Using 15s polling fallback."}
+      </p>
       <div className="toolbar">
         <button type="button" onClick={() => void loadDashboard(accessToken)} disabled={loading}>
           {loading ? "Refreshing..." : "Refresh"}

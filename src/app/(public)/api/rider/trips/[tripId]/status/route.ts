@@ -35,7 +35,18 @@ export async function PATCH(
       throw new AppError("Rider approval pending. Await tenant approval.", 403, "rider_not_approved");
     }
 
-    const updated = await updateTripStatus(auth.tenantId, auth.userId, tripId, input.status, "rider");
+    const trip = await prisma.trip.findFirst({
+      where: { id: tripId, tenantId: auth.tenantId },
+      select: { id: true, riderId: true }
+    });
+    if (!trip) throw new AppError("Trip not found", 404, "trip_not_found");
+    if (trip.riderId !== rider.id) {
+      throw new AppError("Rider is not assigned to this trip", 403, "trip_not_assigned_to_rider");
+    }
+
+    const updated = await updateTripStatus(auth.tenantId, auth.userId, tripId, input.status, "rider", {
+      cancelReason: input.cancelReason
+    });
     return ok(updated);
   } catch (error) {
     return fail(error);

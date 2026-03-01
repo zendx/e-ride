@@ -1,12 +1,13 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { login as loginApi } from "../lib/api";
+import { login as loginApi, registerPushToken } from "../lib/api";
 import { clearSession, loadSession, saveSession } from "../lib/storage";
-import { AuthSession } from "../types/auth";
+import { AppRole, AuthSession } from "../types/auth";
+import { Platform } from "react-native";
 
 type AuthContextValue = {
   loading: boolean;
   session: AuthSession | null;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string, expectedRole?: AppRole) => Promise<void>;
   logout: () => Promise<void>;
 };
 
@@ -30,10 +31,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  async function login(email: string, password: string) {
+  async function login(email: string, password: string, expectedRole?: AppRole) {
     const payload = await loginApi(email, password);
     if (payload.user.role !== "rider" && payload.user.role !== "passenger") {
       throw new Error("Only rider or passenger accounts can use this mobile app.");
+    }
+    if (expectedRole && payload.user.role !== expectedRole) {
+      throw new Error(`This account is not a ${expectedRole}.`);
     }
 
     const nextSession: AuthSession = {
@@ -50,6 +54,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     await saveSession(nextSession);
     setSession(nextSession);
+
+    const pushTokenFromEnv = process.env.EXPO_PUBLIC_PUSH_TOKEN;
+    if (pushTokenFromEnv) {
+      void registerPushToken(nextSession.accessToken, {
+        token: pushTokenFromEnv,
+        platform: Platform.OS === "ios" ? "ios" : Platform.OS === "android" ? "android" : "web",
+        appVersion: "0.1.0"
+      }).catch(() => undefined);
+    }
   }
 
   async function logout() {

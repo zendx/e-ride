@@ -74,6 +74,17 @@ A new Expo-based mobile app scaffold is available in `mobile/` with:
 - login via `/api/auth/login`
 - rider flow: update availability and trip status
 - passenger flow: request trip
+- rider/passenger trip cancellation
+- rider/passenger trip history
+- rider location pings + live trip snapshots
+- rider/passenger trip ratings and feedback
+- trip event streaming endpoints (SSE) + in-app auto-refresh live tracking loop
+- tenant-admin and super-admin dashboards now consume SSE streams with polling fallback
+- super-admin tenant detail page now consumes tenant-scoped SSE stream with polling fallback
+- mobile preferences sync API, in-app help center ticketing, and passenger receipt endpoint
+- rider earnings receipt endpoint + support ticket inbox/messages API
+- trip chat scaffold API + passenger/rider receipt list endpoints + help-center auto-refresh
+- receipt download endpoints + simulated support replies + live chat auto-refresh toggles
 
 ### Run mobile app
 

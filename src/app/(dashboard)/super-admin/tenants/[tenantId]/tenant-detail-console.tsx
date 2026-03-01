@@ -83,6 +83,7 @@ export function TenantDetailConsole({ tenantId }: { tenantId: string }) {
   const [sessionReady, setSessionReady] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [streamState, setStreamState] = useState<"connecting" | "live" | "fallback">("connecting");
   const [insights, setInsights] = useState<TenantInsights | null>(null);
   const [tenantResult, setTenantResult] = useState<{ ok: boolean; message: string } | null>(null);
   const [credentialsResult, setCredentialsResult] = useState<{ ok: boolean; message: string } | null>(null);
@@ -178,6 +179,54 @@ export function TenantDetailConsole({ tenantId }: { tenantId: string }) {
     void loadInsights(storedToken);
   }, [loadInsights, router]);
 
+  useEffect(() => {
+    if (!accessToken.trim()) return;
+    setStreamState("connecting");
+  }, [accessToken, tenantId]);
+
+  useEffect(() => {
+    const token = normalizeToken(accessToken);
+    if (!token || streamState === "fallback") return;
+
+    const eventSource = new EventSource(`/api/super-admin/tenants/${tenantId}/stream?accessToken=${encodeURIComponent(token)}`);
+    let closed = false;
+
+    const handleReady = () => {
+      setStreamState("live");
+      void loadInsights(token);
+    };
+    const handleUpdate = () => {
+      void loadInsights(token);
+    };
+
+    eventSource.addEventListener("ready", handleReady);
+    eventSource.addEventListener("tenant_event", handleUpdate);
+    eventSource.onerror = () => {
+      if (closed) return;
+      setStreamState("fallback");
+      eventSource.close();
+    };
+
+    return () => {
+      closed = true;
+      eventSource.removeEventListener("ready", handleReady);
+      eventSource.removeEventListener("tenant_event", handleUpdate);
+      eventSource.close();
+    };
+  }, [accessToken, loadInsights, streamState, tenantId]);
+
+  useEffect(() => {
+    const token = normalizeToken(accessToken);
+    if (!token || streamState !== "fallback") return;
+
+    void loadInsights(token);
+    const interval = setInterval(() => {
+      void loadInsights(token);
+    }, 15000);
+
+    return () => clearInterval(interval);
+  }, [accessToken, loadInsights, streamState]);
+
   async function submitTenantUpdate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setTenantResult(null);
@@ -268,6 +317,13 @@ export function TenantDetailConsole({ tenantId }: { tenantId: string }) {
     <main className="container">
       <h1>Tenant Detail</h1>
       <p className="page-subtitle">View and edit tenant profile, riders, passengers, trips, and transactions.</p>
+      <p className="muted">
+        {streamState === "live"
+          ? "Live updates via SSE stream."
+          : streamState === "connecting"
+            ? "Connecting to live stream..."
+            : "Stream unavailable. Using 15s polling fallback."}
+      </p>
 
       <div className="toolbar">
         <button type="button" onClick={() => void loadInsights(accessToken)} disabled={loading}>

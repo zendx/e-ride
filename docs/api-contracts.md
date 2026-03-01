@@ -59,6 +59,46 @@ Request:
 ```
 Response: created trip with computed fare and optional initial rider assignment.
 
+### GET `/api/passenger/trips/history?status={status}&limit={limit}`
+Auth: `passenger`
+Response: passenger trip history (latest first).
+
+### GET `/api/passenger/trips/{tripId}/live`
+Auth: `passenger`
+Response: live trip snapshot with latest rider location ping and ETA estimates.
+
+### GET `/api/passenger/trips/{tripId}/stream`
+Auth: `passenger`
+Response: real-time SSE stream (`text/event-stream`) for trip events (`snapshot`, `trip_event`, `heartbeat`).
+
+### PATCH `/api/passenger/trips/{tripId}/cancel`
+Auth: `passenger`
+Request:
+```json
+{ "reason": "Driver is too far away" }
+```
+Effect: cancels an active trip owned by the passenger.
+
+### PATCH `/api/passenger/trips/{tripId}/rate`
+Auth: `passenger`
+Request:
+```json
+{ "rating": 5, "feedback": "Smooth ride and professional driving." }
+```
+Effect: stores passenger review for rider (completed trips only).
+
+### GET `/api/passenger/trips/{tripId}/receipt`
+Auth: `passenger`
+Response: trip fare + payment receipt payload for completed trip.
+
+### GET `/api/passenger/receipts`
+Auth: `passenger`
+Response: list of completed-trip receipts for current passenger.
+
+### GET `/api/passenger/receipts/{tripId}/download`
+Auth: `passenger`
+Response: downloadable text receipt file.
+
 ## Rider app APIs
 
 ### POST `/api/rider/register`
@@ -86,6 +126,14 @@ Request:
 ```
 Requires rider user status `active` (approved).
 
+### PATCH `/api/rider/location`
+Auth: `rider`
+Request:
+```json
+{ "lat": 6.5, "lng": 3.3, "tripId": "cuid_optional" }
+```
+Effect: saves rider location ping and updates rider profile coordinates.
+
 ### PATCH `/api/rider/trips/{tripId}/status`
 Auth: `rider`
 Request:
@@ -93,6 +141,129 @@ Request:
 { "status": "accepted" }
 ```
 Allowed statuses: `accepted`, `arrived`, `in_progress`, `completed`, `cancelled`.
+
+For `cancelled`, include:
+```json
+{ "status": "cancelled", "cancelReason": "Rider emergency" }
+```
+
+### PATCH `/api/rider/trips/{tripId}/cancel`
+Auth: `rider`
+Request:
+```json
+{ "reason": "Vehicle breakdown" }
+```
+Effect: cancels an active trip assigned to the rider.
+
+### GET `/api/rider/trips/history?status={status}&limit={limit}`
+Auth: `rider`
+Response: rider trip history (latest first).
+
+### GET `/api/rider/trips/{tripId}/live`
+Auth: `rider`
+Response: live trip snapshot with latest rider location ping and ETA estimates.
+
+### GET `/api/rider/trips/{tripId}/stream`
+Auth: `rider`
+Response: real-time SSE stream (`text/event-stream`) for trip events (`snapshot`, `trip_event`, `heartbeat`).
+
+### PATCH `/api/rider/trips/{tripId}/rate`
+Auth: `rider`
+Request:
+```json
+{ "rating": 4, "feedback": "Passenger was punctual." }
+```
+Effect: stores rider review for passenger (completed trips only).
+
+### GET `/api/rider/trips/{tripId}/receipt`
+Auth: `rider`
+Response: rider earnings receipt payload for completed trip.
+
+### GET `/api/rider/receipts`
+Auth: `rider`
+Response: list of completed-trip earnings receipts for current rider.
+
+### GET `/api/rider/receipts/{tripId}/download`
+Auth: `rider`
+Response: downloadable text earnings receipt file.
+
+## Shared mobile APIs
+
+### POST `/api/mobile/push-token`
+Auth: `rider` or `passenger`
+Request:
+```json
+{
+  "token": "ExponentPushToken[...]",
+  "platform": "android",
+  "appVersion": "0.1.0"
+}
+```
+Effect: registers (logs) current mobile push token for notifications.
+
+### GET `/api/mobile/preferences`
+Auth: `rider` or `passenger`
+Response: latest persisted mobile profile/payment/notification preferences.
+
+### PATCH `/api/mobile/preferences`
+Auth: `rider` or `passenger`
+Request:
+```json
+{
+  "profileName": "Jane Doe",
+  "profilePhone": "+1000000",
+  "preferredPaymentMethod": "card",
+  "notifications": {
+    "rideRequests": true,
+    "rideUpdates": true,
+    "promotions": false
+  }
+}
+```
+
+### POST `/api/mobile/support/tickets`
+Auth: `rider` or `passenger`
+Request:
+```json
+{
+  "subject": "Lost item",
+  "body": "I left a bag in the car after trip abc123.",
+  "priority": "high"
+}
+```
+Effect: creates a support ticket for tenant operations.
+
+### GET `/api/mobile/support/tickets`
+Auth: `rider` or `passenger`
+Response: current user's support tickets with recent communications.
+
+### GET `/api/mobile/support/tickets/{ticketId}/messages`
+Auth: `rider` or `passenger`
+Response: chat-style support messages for ticket owned by user.
+
+### POST `/api/mobile/support/tickets/{ticketId}/messages`
+Auth: `rider` or `passenger`
+Request:
+```json
+{ "body": "Any update on my ticket?" }
+```
+Effect: posts inbound support chat message for ticket.
+
+### POST `/api/mobile/support/tickets/{ticketId}/simulate-reply`
+Auth: `rider` or `passenger`
+Effect: creates simulated outbound support response for local testing/demo flows.
+
+### GET `/api/mobile/trips/{tripId}/chat`
+Auth: `rider` or `passenger`
+Response: direct in-app trip chat messages for trip participant.
+
+### POST `/api/mobile/trips/{tripId}/chat`
+Auth: `rider` or `passenger`
+Request:
+```json
+{ "body": "I am at the pickup gate." }
+```
+Effect: sends direct in-app trip chat message and emits trip event.
 
 ## Tenant admin/dispatcher APIs
 
@@ -139,11 +310,23 @@ Response:
 - `riderLocationPings`, `riderComplianceDocs`
 - `notifications`, `systemErrors`, `securityLogs`, `geofenceAlerts`, `analyticsSnapshots`
 
+### GET `/api/tenant/monitoring/stream?accessToken={token}`
+Auth: `tenant_admin` or `dispatcher`
+Response: tenant monitoring SSE stream (`ready`, `tenant_event`, `heartbeat`).
+
 ## Super-admin APIs
 
 ### GET `/api/super-admin/tenants`
 Auth: `super_admin`
 Response: tenants + operational counters.
+
+### GET `/api/super-admin/dashboard/stream?accessToken={token}`
+Auth: `super_admin`
+Response: super-admin SSE stream (`ready`, `superadmin_event`, `heartbeat`).
+
+### GET `/api/super-admin/tenants/{tenantId}/stream?accessToken={token}`
+Auth: `super_admin`
+Response: tenant-scoped super-admin SSE stream (`ready`, `tenant_event`, `heartbeat`).
 
 ### POST `/api/super-admin/tenants`
 Auth: `super_admin`

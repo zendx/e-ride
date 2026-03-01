@@ -3,6 +3,8 @@ import { AppError } from "@/lib/errors/app-error";
 import { calculateFare } from "@/lib/modules/trips/fare-engine";
 import { findNearestOnlineRider } from "@/lib/modules/dispatch/matching";
 import { createAuditLog } from "@/lib/modules/audit/service";
+import { publishTripEvent } from "@/lib/modules/trips/realtime";
+import { notifyTripUsers } from "@/lib/modules/notifications/trip-events";
 
 export async function createPassengerTrip(tenantId: string, passengerId: string, input: {
   pickupAddress: string;
@@ -48,6 +50,27 @@ export async function createPassengerTrip(tenantId: string, passengerId: string,
     entityId: trip.id,
     afterJson: trip
   });
+  await publishTripEvent(tenantId, trip.id, "trip.created", {
+    status: trip.status,
+    riderId: trip.riderId
+  });
+  const tripUsers = await prisma.trip.findFirst({
+    where: { id: trip.id, tenantId },
+    select: {
+      id: true,
+      passenger: { select: { userId: true } },
+      rider: { select: { userId: true } }
+    }
+  });
+  if (tripUsers) {
+    await notifyTripUsers({
+      tenantId,
+      userIds: [tripUsers.passenger.userId, tripUsers.rider?.userId ?? ""],
+      title: "Trip update",
+      message: `Trip ${trip.id.slice(0, 8)} created.`,
+      payload: { tripId: trip.id, status: trip.status }
+    });
+  }
 
   return trip;
 }
@@ -73,6 +96,27 @@ export async function assignTripByDispatcher(tenantId: string, dispatcherId: str
     beforeJson: trip,
     afterJson: updated
   });
+  await publishTripEvent(tenantId, tripId, "trip.assigned", {
+    riderId,
+    dispatcherId
+  });
+  const tripUsers = await prisma.trip.findFirst({
+    where: { id: tripId, tenantId },
+    select: {
+      id: true,
+      passenger: { select: { userId: true } },
+      rider: { select: { userId: true } }
+    }
+  });
+  if (tripUsers) {
+    await notifyTripUsers({
+      tenantId,
+      userIds: [tripUsers.passenger.userId, tripUsers.rider?.userId ?? ""],
+      title: "Trip assigned",
+      message: `Trip ${tripId.slice(0, 8)} has been assigned.`,
+      payload: { tripId, riderId }
+    });
+  }
 
   return updated;
 }

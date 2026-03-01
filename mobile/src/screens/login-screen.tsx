@@ -1,12 +1,15 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { ActivityIndicator, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { registerRider } from "../lib/api";
+import { NoticeBanner } from "../components/notice-banner";
 import { useAuth } from "../state/auth-context";
 import { API_BASE_URL } from "../lib/config";
+import { AppRole } from "../types/auth";
 
-export function LoginScreen() {
+export function LoginScreen({ initialRole = "passenger" }: { initialRole?: AppRole }) {
   const { login, loading } = useAuth();
   const [mode, setMode] = useState<"login" | "register">("login");
+  const [loginRole, setLoginRole] = useState<AppRole>(initialRole);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [tenantSlug, setTenantSlug] = useState("");
@@ -19,13 +22,19 @@ export function LoginScreen() {
   const [message, setMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
+  useEffect(() => {
+    if (loginRole !== "rider" && mode === "register") {
+      setMode("login");
+    }
+  }, [loginRole, mode]);
+
   async function onSubmit() {
     setError("");
     setMessage("");
     setSubmitting(true);
     try {
       if (mode === "login") {
-        await login(email.trim(), password);
+        await login(email.trim(), password, loginRole);
       } else {
         await registerRider({
           tenantSlug: tenantSlug.trim().toLowerCase(),
@@ -60,17 +69,36 @@ export function LoginScreen() {
       <View style={styles.card}>
         <Text style={styles.title}>CarryGo Mobile</Text>
         <Text style={styles.subtitle}>
-          {mode === "login" ? "Rider and passenger login" : "Rider registration"}
+          {mode === "login" ? `Login as ${loginRole}` : "Rider registration"}
         </Text>
 
         <View style={styles.switchRow}>
           <TouchableOpacity style={[styles.switchButton, mode === "login" && styles.switchButtonActive]} onPress={() => setMode("login")}>
             <Text style={mode === "login" ? styles.switchTextActive : styles.switchText}>Login</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.switchButton, mode === "register" && styles.switchButtonActive]} onPress={() => setMode("register")}>
-            <Text style={mode === "register" ? styles.switchTextActive : styles.switchText}>Register Rider</Text>
-          </TouchableOpacity>
+          {loginRole === "rider" ? (
+            <TouchableOpacity style={[styles.switchButton, mode === "register" && styles.switchButtonActive]} onPress={() => setMode("register")}>
+              <Text style={mode === "register" ? styles.switchTextActive : styles.switchText}>Register Rider</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
+
+        {mode === "login" ? (
+          <View style={styles.switchRow}>
+            <TouchableOpacity
+              style={[styles.switchButton, loginRole === "passenger" && styles.switchButtonActive]}
+              onPress={() => setLoginRole("passenger")}
+            >
+              <Text style={loginRole === "passenger" ? styles.switchTextActive : styles.switchText}>Passenger</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.switchButton, loginRole === "rider" && styles.switchButtonActive]}
+              onPress={() => setLoginRole("rider")}
+            >
+              <Text style={loginRole === "rider" ? styles.switchTextActive : styles.switchText}>Rider</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
 
         {mode === "register" ? (
           <>
@@ -111,8 +139,8 @@ export function LoginScreen() {
           </Text>
         </TouchableOpacity>
 
-        {message ? <Text style={styles.success}>{message}</Text> : null}
-        {error ? <Text style={styles.error}>{error}</Text> : null}
+        <NoticeBanner tone="success" message={message} />
+        <NoticeBanner tone="error" message={error} />
         <Text style={styles.muted}>API: {API_BASE_URL}</Text>
       </View>
     </KeyboardAvoidingView>
@@ -188,12 +216,6 @@ const styles = StyleSheet.create({
   buttonText: {
     color: "#fff",
     fontWeight: "700"
-  },
-  error: {
-    color: "#8e1b1b"
-  },
-  success: {
-    color: "#0f5132"
   },
   muted: {
     color: "#5a6f8a",

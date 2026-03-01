@@ -158,6 +158,7 @@ export function TenantOpsConsole() {
   const [error, setError] = useState("");
   const [snapshot, setSnapshot] = useState<MonitoringResponse["data"] | null>(null);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<string>("");
+  const [streamState, setStreamState] = useState<"connecting" | "live" | "fallback">("connecting");
   const [approveResult, setApproveResult] = useState<{ ok: boolean; message: string } | null>(null);
 
   const query = useMemo(() => {
@@ -226,12 +227,48 @@ export function TenantOpsConsole() {
 
   useEffect(() => {
     if (!accessToken.trim()) return;
+    setStreamState("connecting");
+  }, [accessToken, query]);
+
+  useEffect(() => {
+    const token = accessToken.trim();
+    if (!token || streamState === "fallback") return;
+
+    const eventSource = new EventSource(`/api/tenant/monitoring/stream?accessToken=${encodeURIComponent(token)}`);
+    let closed = false;
+
+    const handleReady = () => {
+      setStreamState("live");
+      void loadData();
+    };
+    const handleTenantEvent = () => {
+      void loadData();
+    };
+
+    eventSource.addEventListener("ready", handleReady);
+    eventSource.addEventListener("tenant_event", handleTenantEvent);
+    eventSource.onerror = () => {
+      if (closed) return;
+      setStreamState("fallback");
+      eventSource.close();
+    };
+
+    return () => {
+      closed = true;
+      eventSource.removeEventListener("ready", handleReady);
+      eventSource.removeEventListener("tenant_event", handleTenantEvent);
+      eventSource.close();
+    };
+  }, [accessToken, loadData, streamState]);
+
+  useEffect(() => {
+    if (!accessToken.trim() || streamState !== "fallback") return;
     void loadData();
     const interval = setInterval(() => {
       void loadData();
     }, 8000);
     return () => clearInterval(interval);
-  }, [accessToken, loadData]);
+  }, [accessToken, loadData, streamState]);
 
   async function approveRider(riderId: string) {
     if (!accessToken.trim()) return;
@@ -263,7 +300,13 @@ export function TenantOpsConsole() {
   return (
     <section className="card section">
       <h2>Live Operations Console</h2>
-      <p className="muted">Near real-time monitoring with 8s refresh.</p>
+      <p className="muted">
+        {streamState === "live"
+          ? "Live updates via SSE stream."
+          : streamState === "connecting"
+            ? "Connecting to live stream..."
+            : "Stream unavailable. Using 8s polling fallback."}
+      </p>
 
       <div className="form-grid">
         <label>
