@@ -30,6 +30,18 @@ Response:
 
 ## Passenger app APIs
 
+### GET `/api/passenger/riders/nearby?lat={lat}&lng={lng}&radiusKm=5&limit=30`
+Auth: `passenger`
+Response: nearby online approved riders sorted by distance.
+
+### POST `/api/passenger/fare-estimate`
+Auth: `passenger`
+Request:
+```json
+{ "estimatedDistanceKm": 12.4, "estimatedDurationMin": 22 }
+```
+Response: fare breakdown computed from tenant pricing rules.
+
 ### POST `/api/passenger/trips`
 Auth: `passenger`
 Request:
@@ -49,12 +61,30 @@ Response: created trip with computed fare and optional initial rider assignment.
 
 ## Rider app APIs
 
+### POST `/api/rider/register`
+Auth: public
+Request:
+```json
+{
+  "tenantSlug": "alpha-rides",
+  "fullName": "John Rider",
+  "email": "john@alpha-rides.com",
+  "password": "StrongPass123",
+  "phoneNumber": "+1000000",
+  "licenseNumber": "RID-33211",
+  "vehicleType": "Sedan",
+  "vehiclePlate": "ABC-1234"
+}
+```
+Effect: creates rider account in `pending` status for tenant approval.
+
 ### PATCH `/api/rider/status`
 Auth: `rider`
 Request:
 ```json
 { "availability": "online", "lat": 6.5, "lng": 3.3 }
 ```
+Requires rider user status `active` (approved).
 
 ### PATCH `/api/rider/trips/{tripId}/status`
 Auth: `rider`
@@ -90,6 +120,10 @@ Request:
 ### POST `/api/tenant/trips/{tripId}/complete`
 Auth: `tenant_admin` or `dispatcher`
 Effect: marks trip completed and captures payment.
+
+### PATCH `/api/tenant/riders/{riderId}/approve`
+Auth: `tenant_admin`
+Effect: approves pending rider account (sets rider user status to `active`).
 
 ### GET `/api/tenant/monitoring`
 Auth: `tenant_admin` or `dispatcher`

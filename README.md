@@ -68,6 +68,45 @@ npm run dev
 
 See [docs/api-contracts.md](docs/api-contracts.md).
 
+## Mobile app (Rider + Passenger)
+
+A new Expo-based mobile app scaffold is available in `mobile/` with:
+- login via `/api/auth/login`
+- rider flow: update availability and trip status
+- passenger flow: request trip
+
+### Run mobile app
+
+1. Install mobile dependencies
+
+```bash
+npm run mobile:install
+```
+
+2. Set API base URL for Expo
+
+```bash
+# PowerShell
+$env:EXPO_PUBLIC_API_BASE_URL="http://YOUR_LOCAL_IP:3000"
+```
+
+Set Google Maps key for map + address search:
+
+```bash
+# PowerShell
+$env:EXPO_PUBLIC_GOOGLE_MAPS_API_KEY="YOUR_GOOGLE_MAPS_KEY"
+```
+
+3. Start Expo
+
+```bash
+npm run mobile:start
+```
+
+You can also run:
+- `npm run mobile:android`
+- `npm run mobile:ios`
+
 ## Roadmap
 
 See [docs/roadmap.md](docs/roadmap.md).

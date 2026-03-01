@@ -12,7 +12,10 @@ export async function findNearestOnlineRider(tenantId: string, pickupLat: number
       tenantId,
       availability: "online",
       lat: { not: null },
-      lng: { not: null }
+      lng: { not: null },
+      user: {
+        status: "active"
+      }
     },
     take: 100,
     orderBy: { updatedAt: "desc" }

@@ -158,6 +158,7 @@ export function TenantOpsConsole() {
   const [error, setError] = useState("");
   const [snapshot, setSnapshot] = useState<MonitoringResponse["data"] | null>(null);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<string>("");
+  const [approveResult, setApproveResult] = useState<{ ok: boolean; message: string } | null>(null);
 
   const query = useMemo(() => {
     const params = new URLSearchParams({
@@ -232,6 +233,29 @@ export function TenantOpsConsole() {
     return () => clearInterval(interval);
   }, [accessToken, loadData]);
 
+  async function approveRider(riderId: string) {
+    if (!accessToken.trim()) return;
+    setApproveResult(null);
+
+    try {
+      const response = await fetch(`/api/tenant/riders/${riderId}/approve`, {
+        method: "PATCH",
+        headers: { authorization: `Bearer ${accessToken.trim()}` }
+      });
+
+      if (!response.ok) {
+        const body = (await response.json()) as ErrorResponse;
+        setApproveResult({ ok: false, message: body.error?.message ?? `Approval failed (${response.status})` });
+        return;
+      }
+
+      setApproveResult({ ok: true, message: "Rider approved successfully." });
+      await loadData();
+    } catch {
+      setApproveResult({ ok: false, message: "Network error while approving rider." });
+    }
+  }
+
   if (!sessionReady) {
     return <p className="muted">Redirecting to login...</p>;
   }
@@ -273,6 +297,7 @@ export function TenantOpsConsole() {
       </div>
 
       {error ? <p className="status-error">{error}</p> : null}
+      {approveResult ? <p className={approveResult.ok ? "status-ok" : "status-error"}>{approveResult.message}</p> : null}
       {!snapshot ? <p className="muted">Loading riders, passengers, ride records, logs, and analytics.</p> : null}
 
       {snapshot ? (
@@ -311,7 +336,7 @@ export function TenantOpsConsole() {
           <div className="section-block">
             <h3>Riders and Passengers Registry</h3>
             <table className="data-table">
-              <thead><tr><th>Type</th><th>Name</th><th>Email</th><th>Status</th><th>Detail</th><th>Joined</th></tr></thead>
+              <thead><tr><th>Type</th><th>Name</th><th>Email</th><th>Status</th><th>Detail</th><th>Action</th><th>Joined</th></tr></thead>
               <tbody>
                 {snapshot.riders.map((rider) => (
                   <tr key={`r-${rider.id}`}>
@@ -320,6 +345,13 @@ export function TenantOpsConsole() {
                     <td>{rider.user.email}</td>
                     <td>{rider.availability}</td>
                     <td>{rider.vehicleType} {rider.vehiclePlate}</td>
+                    <td>
+                      {rider.user.status === "pending" ? (
+                        <button type="button" onClick={() => void approveRider(rider.id)}>Approve</button>
+                      ) : (
+                        <span className="muted">-</span>
+                      )}
+                    </td>
                     <td>{new Date(rider.createdAt).toLocaleDateString()}</td>
                   </tr>
                 ))}
@@ -330,6 +362,7 @@ export function TenantOpsConsole() {
                     <td>{passenger.user.email}</td>
                     <td>{passenger.user.status}</td>
                     <td>{passenger._count.trips} trips</td>
+                    <td><span className="muted">-</span></td>
                     <td>{new Date(passenger.createdAt).toLocaleDateString()}</td>
                   </tr>
                 ))}

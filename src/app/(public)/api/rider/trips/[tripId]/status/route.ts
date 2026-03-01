@@ -27,6 +27,13 @@ export async function PATCH(
       select: { id: true }
     });
     if (!rider) throw new AppError("Rider not found", 404, "rider_not_found");
+    const riderUser = await prisma.user.findUnique({
+      where: { id: auth.userId },
+      select: { status: true }
+    });
+    if (!riderUser || riderUser.status !== "active") {
+      throw new AppError("Rider approval pending. Await tenant approval.", 403, "rider_not_approved");
+    }
 
     const updated = await updateTripStatus(auth.tenantId, auth.userId, tripId, input.status, "rider");
     return ok(updated);
