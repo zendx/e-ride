@@ -23,5 +23,14 @@ export const riderStatusSchema = z.object({
 });
 
 export const tripStatusUpdateSchema = z.object({
-  status: z.enum(["accepted", "arrived", "in_progress", "completed", "cancelled"])
+  status: z.enum(["accepted", "arrived", "in_progress", "completed", "cancelled"]),
+  cancelReason: z.string().trim().min(3).max(280).optional()
+}).superRefine((input, ctx) => {
+  if (input.status === "cancelled" && !input.cancelReason) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "cancelReason is required when status is cancelled",
+      path: ["cancelReason"]
+    });
+  }
 });
