@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { getPassengerReceipts, getRiderReceipts } from "../lib/api";
 import { NoticeBanner } from "../components/notice-banner";
@@ -29,7 +29,7 @@ export function ReceiptsScreen({ accessToken, role }: ReceiptsScreenProps) {
   const [passengerReceipts, setPassengerReceipts] = useState<PassengerReceipt[]>([]);
   const [riderReceipts, setRiderReceipts] = useState<RiderReceipt[]>([]);
 
-  async function loadReceipts() {
+  const loadReceipts = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
@@ -45,11 +45,11 @@ export function ReceiptsScreen({ accessToken, role }: ReceiptsScreenProps) {
     } finally {
       setLoading(false);
     }
-  }
+  }, [accessToken, role]);
 
   useEffect(() => {
     void loadReceipts();
-  }, [role]);
+  }, [loadReceipts]);
 
   return (
     <ScrollView contentContainerStyle={styles.container}>

@@ -10,18 +10,16 @@ type ProfileSettingsScreenProps = {
   accessToken: string;
   role: AppRole;
   onLogout: () => Promise<void>;
-  onSwitchRole: (nextRole: AppRole) => Promise<void>;
   notice?: string;
 };
 
-export function ProfileSettingsScreen({ accessToken, role, onLogout, onSwitchRole, notice }: ProfileSettingsScreenProps) {
+export function ProfileSettingsScreen({ accessToken, role, onLogout, notice }: ProfileSettingsScreenProps) {
   const [profileName, setProfileName] = useState("");
   const [profilePhone, setProfilePhone] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<"card" | "wallet" | "cash">("card");
   const [rideRequests, setRideRequests] = useState(true);
   const [rideUpdates, setRideUpdates] = useState(true);
   const [promotions, setPromotions] = useState(false);
-  const [targetRole, setTargetRole] = useState<AppRole>(role);
   const [result, setResult] = useState("");
   const [error, setError] = useState("");
   function handleApiError(err: unknown, fallback: string) {
@@ -30,10 +28,6 @@ export function ProfileSettingsScreen({ accessToken, role, onLogout, onSwitchRol
     }
     return toApiErrorMessage(err, fallback);
   }
-
-  useEffect(() => {
-    setTargetRole(role);
-  }, [role]);
 
   useEffect(() => {
     let mounted = true;
@@ -126,22 +120,6 @@ export function ProfileSettingsScreen({ accessToken, role, onLogout, onSwitchRol
         </View>
         <TouchableOpacity style={styles.button} onPress={() => void saveSettings()}>
           <Text style={styles.buttonText}>Save</Text>
-        </TouchableOpacity>
-        <Text style={styles.sectionLabel}>Role Mode</Text>
-        <View style={styles.row}>
-          <TouchableOpacity style={[styles.pill, targetRole === "passenger" && styles.pillActive]} onPress={() => setTargetRole("passenger")}>
-            <Text style={targetRole === "passenger" ? styles.pillTextActive : styles.pillText}>Passenger</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.pill, targetRole === "rider" && styles.pillActive]} onPress={() => setTargetRole("rider")}>
-            <Text style={targetRole === "rider" ? styles.pillTextActive : styles.pillText}>Rider</Text>
-          </TouchableOpacity>
-        </View>
-        <TouchableOpacity
-          style={styles.button}
-          onPress={() => void onSwitchRole(targetRole)}
-          disabled={targetRole === role}
-        >
-          <Text style={styles.buttonText}>Switch to {targetRole === "rider" ? "Rider" : "Passenger"}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.ghostButton} onPress={() => void onLogout()}>
           <Text style={styles.ghostButtonText}>Logout</Text>

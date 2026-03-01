@@ -4,16 +4,38 @@ const slugRegex = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 export const riderRegistrationSchema = z.object({
   tenantSlug: z.string().trim().toLowerCase().regex(slugRegex),
-  fullName: z.string().min(2).max(120),
+  firstName: z.string().trim().min(2).max(60),
+  lastName: z.string().trim().min(2).max(60),
+  middleName: z.string().trim().min(1).max(60).optional(),
   email: z.string().email(),
   password: z.string().min(8).max(128),
-  phoneNumber: z.string().min(4).max(32).optional(),
-  licenseNumber: z.string().min(4).max(64),
-  vehicleType: z.string().min(2).max(64),
-  vehiclePlate: z.string().min(2).max(32),
-  vehicleMake: z.string().min(2).max(64).optional(),
-  vehicleModel: z.string().min(2).max(64).optional(),
-  vehicleColor: z.string().min(2).max(64).optional()
+  address: z.string().trim().min(5).max(240),
+  phoneNumber: z.string().trim().min(4).max(32),
+  whatsappNumber: z.string().trim().min(4).max(32),
+  identificationType: z.enum(["international_passport", "nin", "voters_card"]),
+  identificationNumber: z.string().trim().min(4).max(64).optional(),
+  identificationImageUrl: z.string().trim().min(8).max(2048),
+  dateOfBirth: z.string().trim().min(8).max(32),
+  mothersMaidenName: z.string().trim().min(2).max(120),
+  carName: z.string().trim().min(2).max(64),
+  carModel: z.string().trim().min(2).max(64),
+  carYear: z.coerce.number().int().gte(1970).lte(2100),
+  carCondition: z.string().trim().min(2).max(64),
+  vehiclePlate: z.string().trim().min(2).max(32),
+  livenessConfirmed: z.boolean().refine((value) => value, "Liveness confirmation is required")
+}).refine(
+  (data) => Boolean(data.identificationImageUrl?.trim()),
+  { message: "Identification image is required", path: ["identificationImageUrl"] }
+);
+
+export const passengerRegistrationSchema = z.object({
+  tenantSlug: z.string().trim().toLowerCase().regex(slugRegex),
+  firstName: z.string().trim().min(2).max(60),
+  lastName: z.string().trim().min(2).max(60),
+  middleName: z.string().trim().min(1).max(60).optional(),
+  email: z.string().email(),
+  password: z.string().min(8).max(128),
+  phoneNumber: z.string().trim().min(4).max(32).optional()
 });
 
 export const passengerNearbyRidersSchema = z.object({
@@ -76,6 +98,15 @@ export const supportTicketMessageSchema = z.object({
 
 export const tripChatMessageSchema = z.object({
   body: z.string().trim().min(1).max(1000)
+});
+
+export const riderIssueReportSchema = z.object({
+  reportType: z.enum(["driver_report", "failed_transaction", "dispute"]),
+  subject: z.string().trim().min(3).max(150),
+  details: z.string().trim().min(8).max(2000),
+  tripId: z.string().cuid().optional(),
+  driverId: z.string().cuid().optional(),
+  paymentTransactionId: z.string().cuid().optional()
 });
 
 export type RiderRegistrationInput = z.infer<typeof riderRegistrationSchema>;

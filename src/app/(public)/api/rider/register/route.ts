@@ -20,13 +20,16 @@ export async function POST(request: NextRequest) {
     if (tenant.status !== "active") throw new AppError("Tenant is not active", 403, "tenant_inactive");
 
     const created = await prisma.$transaction(async (tx) => {
+      const fullName = [input.firstName.trim(), input.middleName?.trim(), input.lastName.trim()]
+        .filter(Boolean)
+        .join(" ");
       const user = await tx.user.create({
         data: {
           tenantId: tenant.id,
-          fullName: input.fullName.trim(),
+          fullName,
           email: input.email.trim().toLowerCase(),
           passwordHash: await hashPassword(input.password),
-          phoneNumber: input.phoneNumber?.trim() || undefined,
+          phoneNumber: input.phoneNumber.trim(),
           role: Role.rider,
           status: "pending"
         },
@@ -43,12 +46,13 @@ export async function POST(request: NextRequest) {
         data: {
           tenantId: tenant.id,
           userId: user.id,
-          licenseNumber: input.licenseNumber.trim(),
-          vehicleType: input.vehicleType.trim(),
+          licenseNumber: input.identificationNumber?.trim() || `id-${Date.now()}`,
+          vehicleType: input.carName.trim(),
           vehiclePlate: input.vehiclePlate.trim(),
-          vehicleMake: input.vehicleMake?.trim() || undefined,
-          vehicleModel: input.vehicleModel?.trim() || undefined,
-          vehicleColor: input.vehicleColor?.trim() || undefined,
+          vehicleMake: input.carName.trim(),
+          vehicleModel: input.carModel.trim(),
+          vehicleColor: input.carCondition.trim(),
+          idDocumentUrl: input.identificationImageUrl.trim(),
           availability: "offline"
         },
         select: {
@@ -69,10 +73,61 @@ export async function POST(request: NextRequest) {
           entityId: user.id,
           afterJson: {
             tenantSlug: tenant.slug,
-            riderProfileId: riderProfile.id
+            riderProfileId: riderProfile.id,
+            enrollment: {
+              firstName: input.firstName.trim(),
+              middleName: input.middleName?.trim() || null,
+              lastName: input.lastName.trim(),
+              address: input.address.trim(),
+              phoneNumber: input.phoneNumber.trim(),
+              whatsappNumber: input.whatsappNumber.trim(),
+              identificationType: input.identificationType,
+              identificationNumber: input.identificationNumber?.trim() || null,
+              identificationImageUrl: input.identificationImageUrl.trim(),
+              dateOfBirth: input.dateOfBirth.trim(),
+              mothersMaidenName: input.mothersMaidenName.trim(),
+              carName: input.carName.trim(),
+              carModel: input.carModel.trim(),
+              carYear: input.carYear,
+              carCondition: input.carCondition.trim(),
+              vehiclePlate: input.vehiclePlate.trim(),
+              livenessConfirmed: input.livenessConfirmed
+            }
           },
           ipAddress: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim(),
           userAgent: request.headers.get("user-agent") ?? undefined
+        }
+      });
+
+      await tx.securityLog.create({
+        data: {
+          tenantId: tenant.id,
+          userId: user.id,
+          action: "driver.enrollment_submitted",
+          success: true,
+          ipAddress: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim(),
+          userAgent: request.headers.get("user-agent") ?? undefined,
+          metadata: {
+            riderProfileId: riderProfile.id,
+            firstName: input.firstName.trim(),
+            middleName: input.middleName?.trim() || null,
+            lastName: input.lastName.trim(),
+            address: input.address.trim(),
+            phoneNumber: input.phoneNumber.trim(),
+            whatsappNumber: input.whatsappNumber.trim(),
+            identificationType: input.identificationType,
+            identificationNumber: input.identificationNumber?.trim() || null,
+            identificationImageUrl: input.identificationImageUrl.trim(),
+            dateOfBirth: input.dateOfBirth.trim(),
+            mothersMaidenName: input.mothersMaidenName.trim(),
+            carName: input.carName.trim(),
+            carModel: input.carModel.trim(),
+            carYear: input.carYear,
+            carCondition: input.carCondition.trim(),
+            vehiclePlate: input.vehiclePlate.trim(),
+            livenessConfirmed: input.livenessConfirmed,
+            verificationStatus: "pending"
+          }
         }
       });
 

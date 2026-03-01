@@ -33,11 +33,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   async function login(email: string, password: string, expectedRole?: AppRole) {
     const payload = await loginApi(email, password);
+    const roleLabel = (role: AppRole) => (role === "rider" ? "Driver" : "Rider");
     if (payload.user.role !== "rider" && payload.user.role !== "passenger") {
-      throw new Error("Only rider or passenger accounts can use this mobile app.");
+      throw new Error("Only Driver or Rider accounts can use this mobile app.");
     }
     if (expectedRole && payload.user.role !== expectedRole) {
-      throw new Error(`This account is not a ${expectedRole}.`);
+      throw new Error(`This account is not a ${roleLabel(expectedRole)} account.`);
     }
 
     const nextSession: AuthSession = {

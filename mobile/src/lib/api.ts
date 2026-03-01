@@ -5,8 +5,66 @@ type ApiErrorBody = {
   error?: { message?: string };
 };
 
+type ApiRequestOptions = {
+  retries?: number;
+  timeoutMs?: number;
+};
+
+const API_TIMEOUT_MS = Number(process.env.EXPO_PUBLIC_API_TIMEOUT_MS ?? 12000);
+const API_GET_RETRIES = Number(process.env.EXPO_PUBLIC_API_GET_RETRIES ?? 1);
+const RETRYABLE_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
+
 function withBase(path: string) {
   return `${API_BASE_URL}${path}`;
+}
+
+function isAbortError(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  return (error as { name?: string }).name === "AbortError";
+}
+
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms));
+}
+
+async function apiRequest(url: string, init?: RequestInit, options?: ApiRequestOptions) {
+  const method = (init?.method ?? "GET").toUpperCase();
+  const retries = options?.retries ?? (method === "GET" ? API_GET_RETRIES : 0);
+  const timeoutMs = options?.timeoutMs ?? API_TIMEOUT_MS;
+
+  let networkError: unknown = null;
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetch(url, { ...init, signal: controller.signal });
+      if (!response.ok) {
+        const canRetry = method === "GET" && RETRYABLE_STATUS.has(response.status) && attempt < retries;
+        if (canRetry) {
+          await sleep(300 * (attempt + 1));
+          continue;
+        }
+      }
+      return response;
+    } catch (error) {
+      networkError = error;
+      if (attempt < retries && method === "GET") {
+        await sleep(300 * (attempt + 1));
+        continue;
+      }
+      if (isAbortError(error)) {
+        throw new Error("Request timed out. Please try again.");
+      }
+      throw new Error("Network error. Check your connection and try again.");
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  if (isAbortError(networkError)) {
+    throw new Error("Request timed out. Please try again.");
+  }
+  throw new Error("Network error. Check your connection and try again.");
 }
 
 async function parseError(response: Response, fallback: string) {
@@ -19,7 +77,7 @@ async function parseError(response: Response, fallback: string) {
 }
 
 export async function login(email: string, password: string) {
-  const response = await fetch(withBase("/api/auth/login"), {
+  const response = await apiRequest(withBase("/api/auth/login"), {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ email, password })
@@ -35,18 +93,49 @@ export async function login(email: string, password: string) {
 
 export async function registerRider(payload: {
   tenantSlug: string;
-  fullName: string;
+  firstName: string;
+  lastName: string;
+  middleName?: string;
+  email: string;
+  password: string;
+  address: string;
+  phoneNumber: string;
+  whatsappNumber: string;
+  identificationType: "international_passport" | "nin" | "voters_card";
+  identificationNumber?: string;
+  identificationImageUrl: string;
+  dateOfBirth: string;
+  mothersMaidenName: string;
+  carName: string;
+  carModel: string;
+  carYear: number;
+  carCondition: string;
+  vehiclePlate: string;
+  livenessConfirmed: boolean;
+}) {
+  const response = await apiRequest(withBase("/api/rider/register"), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseError(response, `Registration failed (${response.status})`));
+  }
+
+  return response.json();
+}
+
+export async function registerPassenger(payload: {
+  tenantSlug: string;
+  firstName: string;
+  lastName: string;
+  middleName?: string;
   email: string;
   password: string;
   phoneNumber?: string;
-  licenseNumber: string;
-  vehicleType: string;
-  vehiclePlate: string;
-  vehicleMake?: string;
-  vehicleModel?: string;
-  vehicleColor?: string;
 }) {
-  const response = await fetch(withBase("/api/rider/register"), {
+  const response = await apiRequest(withBase("/api/passenger/register"), {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(payload)
@@ -64,7 +153,7 @@ export async function updateRiderStatus(accessToken: string, payload: {
   lat?: number;
   lng?: number;
 }) {
-  const response = await fetch(withBase("/api/rider/status"), {
+  const response = await apiRequest(withBase("/api/rider/status"), {
     method: "PATCH",
     headers: {
       "content-type": "application/json",
@@ -87,7 +176,7 @@ export async function updateRiderTripStatusWithReason(
   tripId: string,
   payload: { status: "accepted" | "arrived" | "in_progress" | "completed" | "cancelled"; cancelReason?: string }
 ) {
-  const response = await fetch(withBase(`/api/rider/trips/${tripId}/status`), {
+  const response = await apiRequest(withBase(`/api/rider/trips/${tripId}/status`), {
     method: "PATCH",
     headers: {
       "content-type": "application/json",
@@ -102,7 +191,7 @@ export async function updateRiderTripStatusWithReason(
 }
 
 export async function cancelRiderTrip(accessToken: string, tripId: string, reason: string) {
-  const response = await fetch(withBase(`/api/rider/trips/${tripId}/cancel`), {
+  const response = await apiRequest(withBase(`/api/rider/trips/${tripId}/cancel`), {
     method: "PATCH",
     headers: {
       "content-type": "application/json",
@@ -124,7 +213,7 @@ export async function pingRiderLocation(accessToken: string, payload: {
   accuracyMeters?: number;
   tripId?: string;
 }) {
-  const response = await fetch(withBase("/api/rider/location"), {
+  const response = await apiRequest(withBase("/api/rider/location"), {
     method: "PATCH",
     headers: {
       "content-type": "application/json",
@@ -150,7 +239,7 @@ export async function requestPassengerTrip(accessToken: string, payload: {
   estimatedDistanceKm: number;
   estimatedDurationMin: number;
 }) {
-  const response = await fetch(withBase("/api/passenger/trips"), {
+  const response = await apiRequest(withBase("/api/passenger/trips"), {
     method: "POST",
     headers: {
       "content-type": "application/json",
@@ -167,7 +256,7 @@ export async function requestPassengerTrip(accessToken: string, payload: {
 }
 
 export async function cancelPassengerTrip(accessToken: string, tripId: string, reason: string) {
-  const response = await fetch(withBase(`/api/passenger/trips/${tripId}/cancel`), {
+  const response = await apiRequest(withBase(`/api/passenger/trips/${tripId}/cancel`), {
     method: "PATCH",
     headers: {
       "content-type": "application/json",
@@ -182,7 +271,7 @@ export async function cancelPassengerTrip(accessToken: string, tripId: string, r
 }
 
 export async function getPassengerTripLive(accessToken: string, tripId: string) {
-  const response = await fetch(withBase(`/api/passenger/trips/${tripId}/live`), {
+  const response = await apiRequest(withBase(`/api/passenger/trips/${tripId}/live`), {
     headers: {
       authorization: `Bearer ${accessToken}`
     }
@@ -196,7 +285,7 @@ export async function getPassengerTripLive(accessToken: string, tripId: string) 
 }
 
 export async function getRiderTripLive(accessToken: string, tripId: string) {
-  const response = await fetch(withBase(`/api/rider/trips/${tripId}/live`), {
+  const response = await apiRequest(withBase(`/api/rider/trips/${tripId}/live`), {
     headers: {
       authorization: `Bearer ${accessToken}`
     }
@@ -222,7 +311,7 @@ export async function searchNearbyRiders(accessToken: string, params: {
     limit: String(params.limit ?? 30)
   });
 
-  const response = await fetch(withBase(`/api/passenger/riders/nearby?${query.toString()}`), {
+  const response = await apiRequest(withBase(`/api/passenger/riders/nearby?${query.toString()}`), {
     headers: {
       authorization: `Bearer ${accessToken}`
     }
@@ -239,7 +328,7 @@ export async function estimatePassengerFare(accessToken: string, payload: {
   estimatedDistanceKm: number;
   estimatedDurationMin: number;
 }) {
-  const response = await fetch(withBase("/api/passenger/fare-estimate"), {
+  const response = await apiRequest(withBase("/api/passenger/fare-estimate"), {
     method: "POST",
     headers: {
       "content-type": "application/json",
@@ -260,7 +349,7 @@ export async function getPassengerTripHistory(accessToken: string, params?: { st
   if (params?.status) query.set("status", params.status);
   if (params?.limit) query.set("limit", String(params.limit));
 
-  const response = await fetch(withBase(`/api/passenger/trips/history${query.toString() ? `?${query.toString()}` : ""}`), {
+  const response = await apiRequest(withBase(`/api/passenger/trips/history${query.toString() ? `?${query.toString()}` : ""}`), {
     headers: {
       authorization: `Bearer ${accessToken}`
     }
@@ -278,7 +367,7 @@ export async function getRiderTripHistory(accessToken: string, params?: { status
   if (params?.status) query.set("status", params.status);
   if (params?.limit) query.set("limit", String(params.limit));
 
-  const response = await fetch(withBase(`/api/rider/trips/history${query.toString() ? `?${query.toString()}` : ""}`), {
+  const response = await apiRequest(withBase(`/api/rider/trips/history${query.toString() ? `?${query.toString()}` : ""}`), {
     headers: {
       authorization: `Bearer ${accessToken}`
     }
@@ -292,7 +381,7 @@ export async function getRiderTripHistory(accessToken: string, params?: { status
 }
 
 export async function ratePassengerTrip(accessToken: string, tripId: string, payload: { rating: number; feedback?: string }) {
-  const response = await fetch(withBase(`/api/passenger/trips/${tripId}/rate`), {
+  const response = await apiRequest(withBase(`/api/passenger/trips/${tripId}/rate`), {
     method: "PATCH",
     headers: {
       "content-type": "application/json",
@@ -309,7 +398,7 @@ export async function ratePassengerTrip(accessToken: string, tripId: string, pay
 }
 
 export async function rateRiderTrip(accessToken: string, tripId: string, payload: { rating: number; feedback?: string }) {
-  const response = await fetch(withBase(`/api/rider/trips/${tripId}/rate`), {
+  const response = await apiRequest(withBase(`/api/rider/trips/${tripId}/rate`), {
     method: "PATCH",
     headers: {
       "content-type": "application/json",
@@ -330,7 +419,7 @@ export async function registerPushToken(accessToken: string, payload: {
   platform: "ios" | "android" | "web";
   appVersion?: string;
 }) {
-  const response = await fetch(withBase("/api/mobile/push-token"), {
+  const response = await apiRequest(withBase("/api/mobile/push-token"), {
     method: "POST",
     headers: {
       "content-type": "application/json",
@@ -347,7 +436,7 @@ export async function registerPushToken(accessToken: string, payload: {
 }
 
 export async function getMobilePreferences(accessToken: string) {
-  const response = await fetch(withBase("/api/mobile/preferences"), {
+  const response = await apiRequest(withBase("/api/mobile/preferences"), {
     headers: {
       authorization: `Bearer ${accessToken}`
     }
@@ -370,7 +459,7 @@ export async function saveMobilePreferences(accessToken: string, payload: {
     promotions: boolean;
   };
 }) {
-  const response = await fetch(withBase("/api/mobile/preferences"), {
+  const response = await apiRequest(withBase("/api/mobile/preferences"), {
     method: "PATCH",
     headers: {
       "content-type": "application/json",
@@ -391,7 +480,7 @@ export async function createSupportTicket(accessToken: string, payload: {
   body: string;
   priority?: "low" | "normal" | "high";
 }) {
-  const response = await fetch(withBase("/api/mobile/support/tickets"), {
+  const response = await apiRequest(withBase("/api/mobile/support/tickets"), {
     method: "POST",
     headers: {
       "content-type": "application/json",
@@ -408,7 +497,7 @@ export async function createSupportTicket(accessToken: string, payload: {
 }
 
 export async function getPassengerTripReceipt(accessToken: string, tripId: string) {
-  const response = await fetch(withBase(`/api/passenger/trips/${tripId}/receipt`), {
+  const response = await apiRequest(withBase(`/api/passenger/trips/${tripId}/receipt`), {
     headers: {
       authorization: `Bearer ${accessToken}`
     }
@@ -422,7 +511,7 @@ export async function getPassengerTripReceipt(accessToken: string, tripId: strin
 }
 
 export async function getRiderTripReceipt(accessToken: string, tripId: string) {
-  const response = await fetch(withBase(`/api/rider/trips/${tripId}/receipt`), {
+  const response = await apiRequest(withBase(`/api/rider/trips/${tripId}/receipt`), {
     headers: {
       authorization: `Bearer ${accessToken}`
     }
@@ -436,7 +525,7 @@ export async function getRiderTripReceipt(accessToken: string, tripId: string) {
 }
 
 export async function getPassengerReceipts(accessToken: string) {
-  const response = await fetch(withBase("/api/passenger/receipts"), {
+  const response = await apiRequest(withBase("/api/passenger/receipts"), {
     headers: {
       authorization: `Bearer ${accessToken}`
     }
@@ -450,7 +539,7 @@ export async function getPassengerReceipts(accessToken: string) {
 }
 
 export async function getRiderReceipts(accessToken: string) {
-  const response = await fetch(withBase("/api/rider/receipts"), {
+  const response = await apiRequest(withBase("/api/rider/receipts"), {
     headers: {
       authorization: `Bearer ${accessToken}`
     }
@@ -464,7 +553,7 @@ export async function getRiderReceipts(accessToken: string) {
 }
 
 export async function listSupportTickets(accessToken: string) {
-  const response = await fetch(withBase("/api/mobile/support/tickets"), {
+  const response = await apiRequest(withBase("/api/mobile/support/tickets"), {
     headers: {
       authorization: `Bearer ${accessToken}`
     }
@@ -478,7 +567,7 @@ export async function listSupportTickets(accessToken: string) {
 }
 
 export async function listSupportMessages(accessToken: string, ticketId: string) {
-  const response = await fetch(withBase(`/api/mobile/support/tickets/${ticketId}/messages`), {
+  const response = await apiRequest(withBase(`/api/mobile/support/tickets/${ticketId}/messages`), {
     headers: {
       authorization: `Bearer ${accessToken}`
     }
@@ -492,7 +581,7 @@ export async function listSupportMessages(accessToken: string, ticketId: string)
 }
 
 export async function sendSupportMessage(accessToken: string, ticketId: string, body: string) {
-  const response = await fetch(withBase(`/api/mobile/support/tickets/${ticketId}/messages`), {
+  const response = await apiRequest(withBase(`/api/mobile/support/tickets/${ticketId}/messages`), {
     method: "POST",
     headers: {
       "content-type": "application/json",
@@ -509,7 +598,7 @@ export async function sendSupportMessage(accessToken: string, ticketId: string, 
 }
 
 export async function simulateSupportReply(accessToken: string, ticketId: string) {
-  const response = await fetch(withBase(`/api/mobile/support/tickets/${ticketId}/simulate-reply`), {
+  const response = await apiRequest(withBase(`/api/mobile/support/tickets/${ticketId}/simulate-reply`), {
     method: "POST",
     headers: {
       authorization: `Bearer ${accessToken}`
@@ -523,8 +612,32 @@ export async function simulateSupportReply(accessToken: string, ticketId: string
   return response.json();
 }
 
+export async function reportRiderIssue(accessToken: string, payload: {
+  reportType: "driver_report" | "failed_transaction" | "dispute";
+  subject: string;
+  details: string;
+  tripId?: string;
+  driverId?: string;
+  paymentTransactionId?: string;
+}) {
+  const response = await apiRequest(withBase("/api/mobile/reports"), {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${accessToken}`
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseError(response, `Issue report failed (${response.status})`));
+  }
+
+  return response.json();
+}
+
 export async function listTripChatMessages(accessToken: string, tripId: string) {
-  const response = await fetch(withBase(`/api/mobile/trips/${tripId}/chat`), {
+  const response = await apiRequest(withBase(`/api/mobile/trips/${tripId}/chat`), {
     headers: {
       authorization: `Bearer ${accessToken}`
     }
@@ -538,7 +651,7 @@ export async function listTripChatMessages(accessToken: string, tripId: string) 
 }
 
 export async function sendTripChatMessage(accessToken: string, tripId: string, body: string) {
-  const response = await fetch(withBase(`/api/mobile/trips/${tripId}/chat`), {
+  const response = await apiRequest(withBase(`/api/mobile/trips/${tripId}/chat`), {
     method: "POST",
     headers: {
       "content-type": "application/json",

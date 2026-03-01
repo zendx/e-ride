@@ -64,6 +64,7 @@ export async function GET(request: NextRequest) {
       complaints,
       supportTickets,
       supportCommunications,
+      driverEnrollments,
       riderLocationPings,
       riderComplianceDocs,
       notifications,
@@ -277,9 +278,90 @@ export async function GET(request: NextRequest) {
           channel: true,
           direction: true,
           body: true,
+          metadata: true,
           createdAt: true
         }
       }), []),
+
+      safe(async () => {
+        const [enrollments, verifications, invites] = await Promise.all([
+          prisma.securityLog.findMany({
+            where: { tenantId: auth.tenantId, action: "driver.enrollment_submitted" },
+            orderBy: { createdAt: "desc" },
+            take: peopleLimit,
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  fullName: true,
+                  email: true,
+                  phoneNumber: true
+                }
+              }
+            }
+          }),
+          prisma.securityLog.findMany({
+            where: { tenantId: auth.tenantId, action: "tenant.driver_enrollment_verified" },
+            orderBy: { createdAt: "desc" },
+            take: 500,
+            select: { createdAt: true, metadata: true }
+          }),
+          prisma.securityLog.findMany({
+            where: { tenantId: auth.tenantId, action: "tenant.driver_inspection_invited" },
+            orderBy: { createdAt: "desc" },
+            take: 500,
+            select: { createdAt: true, metadata: true }
+          })
+        ]);
+
+        const verifiedByRiderId = new Map<string, string>();
+        for (const item of verifications) {
+          const metadata = item.metadata as { riderId?: string } | null;
+          if (!metadata?.riderId || verifiedByRiderId.has(metadata.riderId)) continue;
+          verifiedByRiderId.set(metadata.riderId, item.createdAt.toISOString());
+        }
+
+        const inviteByRiderId = new Map<string, { at: string; channel: string | null }>();
+        for (const item of invites) {
+          const metadata = item.metadata as { riderId?: string; channel?: string } | null;
+          if (!metadata?.riderId || inviteByRiderId.has(metadata.riderId)) continue;
+          inviteByRiderId.set(metadata.riderId, {
+            at: item.createdAt.toISOString(),
+            channel: metadata.channel ?? null
+          });
+        }
+
+        return enrollments.map((entry) => {
+          const metadata = (entry.metadata ?? {}) as Record<string, unknown>;
+          const riderProfileId = typeof metadata.riderProfileId === "string" ? metadata.riderProfileId : null;
+          return {
+            id: entry.id,
+            createdAt: entry.createdAt,
+            userId: entry.userId,
+            riderProfileId,
+            user: entry.user,
+            firstName: typeof metadata.firstName === "string" ? metadata.firstName : null,
+            middleName: typeof metadata.middleName === "string" ? metadata.middleName : null,
+            lastName: typeof metadata.lastName === "string" ? metadata.lastName : null,
+            address: typeof metadata.address === "string" ? metadata.address : null,
+            phoneNumber: typeof metadata.phoneNumber === "string" ? metadata.phoneNumber : null,
+            whatsappNumber: typeof metadata.whatsappNumber === "string" ? metadata.whatsappNumber : null,
+            identificationType: typeof metadata.identificationType === "string" ? metadata.identificationType : null,
+            dateOfBirth: typeof metadata.dateOfBirth === "string" ? metadata.dateOfBirth : null,
+            mothersMaidenName: typeof metadata.mothersMaidenName === "string" ? metadata.mothersMaidenName : null,
+            carName: typeof metadata.carName === "string" ? metadata.carName : null,
+            carModel: typeof metadata.carModel === "string" ? metadata.carModel : null,
+            carYear: typeof metadata.carYear === "number" ? metadata.carYear : null,
+            carCondition: typeof metadata.carCondition === "string" ? metadata.carCondition : null,
+            vehiclePlate: typeof metadata.vehiclePlate === "string" ? metadata.vehiclePlate : null,
+            livenessConfirmed: metadata.livenessConfirmed === true,
+            verificationStatus: riderProfileId && verifiedByRiderId.has(riderProfileId) ? "verified" : "pending",
+            verifiedAt: riderProfileId ? verifiedByRiderId.get(riderProfileId) ?? null : null,
+            invitedAt: riderProfileId ? inviteByRiderId.get(riderProfileId)?.at ?? null : null,
+            invitedChannel: riderProfileId ? inviteByRiderId.get(riderProfileId)?.channel ?? null : null
+          };
+        });
+      }, []),
 
       safe(() => prisma.driverLocationPing.findMany({
         where: { tenantId: auth.tenantId },
@@ -399,6 +481,7 @@ export async function GET(request: NextRequest) {
       complaints,
       supportTickets,
       supportCommunications,
+      driverEnrollments,
       riderLocationPings,
       riderComplianceDocs,
       notifications,

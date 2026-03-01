@@ -1,9 +1,10 @@
 ﻿import { ReactNode } from "react";
-import { Manrope } from "next/font/google";
+import { Poppins } from "next/font/google";
 import "./globals.css";
 
-const manrope = Manrope({
+const poppins = Poppins({
   subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800"],
   display: "swap"
 });
 
@@ -15,7 +16,7 @@ export const metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
-      <body className={manrope.className}>{children}</body>
+      <body className={poppins.className}>{children}</body>
     </html>
   );
 }

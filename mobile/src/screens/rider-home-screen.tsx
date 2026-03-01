@@ -1,12 +1,26 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
-import MapView, { Marker } from "react-native-maps";
 import { cancelRiderTrip, getRiderTripHistory, getRiderTripLive, getRiderTripReceipt, listTripChatMessages, pingRiderLocation, rateRiderTrip, sendTripChatMessage, subscribeTripChatEvents, updateRiderStatus, updateRiderTripStatusWithReason } from "../lib/api";
 import { isAuthOrRoleError, toApiErrorMessage } from "../lib/api-errors";
+import { AppMap } from "../components/app-map";
 import { NoticeBanner } from "../components/notice-banner";
 import { useAuth } from "../state/auth-context";
 
 type RiderHistoryItem = {
+  id: string;
+  status: string;
+  pickupAddress: string;
+  dropoffAddress: string;
+  requestedAt: string;
+  fareTotalMinor: number;
+  passenger?: {
+    user?: {
+      fullName?: string;
+    };
+  } | null;
+};
+
+type IncomingTripItem = {
   id: string;
   status: string;
   pickupAddress: string;
@@ -26,6 +40,8 @@ type RiderHomeScreenProps = {
 
 export function RiderHomeScreen({ onRoleAuthError }: RiderHomeScreenProps) {
   const { session } = useAuth();
+  const accessToken = session?.accessToken ?? "";
+  const userEmail = session?.user.email ?? "";
   const [availability, setAvailability] = useState<"online" | "offline">("online");
   const [lat, setLat] = useState("");
   const [lng, setLng] = useState("");
@@ -33,6 +49,8 @@ export function RiderHomeScreen({ onRoleAuthError }: RiderHomeScreenProps) {
   const [tripStatus, setTripStatus] = useState<"accepted" | "arrived" | "in_progress" | "completed" | "cancelled">("accepted");
   const [cancelReason, setCancelReason] = useState("");
   const [cancelTripId, setCancelTripId] = useState("");
+  const [incomingTrips, setIncomingTrips] = useState<IncomingTripItem[]>([]);
+  const [incomingLoading, setIncomingLoading] = useState(false);
   const [history, setHistory] = useState<RiderHistoryItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [liveTripId, setLiveTripId] = useState("");
@@ -44,22 +62,20 @@ export function RiderHomeScreen({ onRoleAuthError }: RiderHomeScreenProps) {
   const [rideEarningsMinor, setRideEarningsMinor] = useState<number | null>(null);
   const [tipMinor, setTipMinor] = useState<number>(0);
   const [chatTripId, setChatTripId] = useState("");
-  const [chatMessages, setChatMessages] = useState<Array<{ id: string; senderRole?: string; body?: string }>>([]);
+  const [chatMessages, setChatMessages] = useState<{ id: string; senderRole?: string; body?: string }[]>([]);
   const [chatMessageInput, setChatMessageInput] = useState("");
   const [chatLive, setChatLive] = useState(false);
   const [chatMode, setChatMode] = useState<"idle" | "stream" | "fallback">("idle");
   const [result, setResult] = useState("");
   const [error, setError] = useState("");
 
-  if (!session) return null;
-  const activeSession = session;
-  function handleApiError(err: unknown, fallback: string) {
+  const handleApiError = useCallback((err: unknown, fallback: string) => {
     if (isAuthOrRoleError(err)) {
       onRoleAuthError?.();
       return "Session access issue detected. Open Profile tab to switch role or log in again.";
     }
     return toApiErrorMessage(err, fallback);
-  }
+  }, [onRoleAuthError]);
   const liveParsed = useMemo(() => {
     if (!liveSnapshot.trim()) return null;
     try {
@@ -99,21 +115,73 @@ export function RiderHomeScreen({ onRoleAuthError }: RiderHomeScreenProps) {
     setError("");
     setResult("");
     try {
-      await updateRiderStatus(activeSession.accessToken, {
+      await updateRiderStatus(accessToken, {
         availability,
         lat: lat ? Number(lat) : undefined,
         lng: lng ? Number(lng) : undefined
       });
       if (lat && lng) {
-        await pingRiderLocation(activeSession.accessToken, {
+        await pingRiderLocation(accessToken, {
           lat: Number(lat),
           lng: Number(lng),
           tripId: tripId.trim() || undefined
         });
       }
       setResult("Availability updated.");
+      if (availability === "online") {
+        await loadIncomingTrips();
+      }
     } catch (err) {
       setError(handleApiError(err, "Failed to update availability."));
+    }
+  }
+
+  const loadIncomingTrips = useCallback(async () => {
+    setIncomingLoading(true);
+    setError("");
+    try {
+      const response = await getRiderTripHistory(accessToken, {
+        status: "assigned",
+        limit: 10
+      });
+      const trips = ((response?.data?.trips ?? []) as IncomingTripItem[]);
+      setIncomingTrips(trips);
+    } catch (err) {
+      setError(handleApiError(err, "Failed to load incoming requests."));
+    } finally {
+      setIncomingLoading(false);
+    }
+  }, [accessToken, handleApiError]);
+
+  async function acceptIncomingTrip(nextTripId: string) {
+    setError("");
+    setResult("");
+    try {
+      await updateRiderTripStatusWithReason(accessToken, nextTripId, {
+        status: "accepted"
+      });
+      setTripId(nextTripId);
+      setTripStatus("accepted");
+      setResult(`Trip accepted (${nextTripId}).`);
+      await loadIncomingTrips();
+      await loadHistory();
+    } catch (err) {
+      setError(handleApiError(err, "Failed to accept trip."));
+    }
+  }
+
+  async function declineIncomingTrip(nextTripId: string) {
+    setError("");
+    setResult("");
+    try {
+      await updateRiderTripStatusWithReason(accessToken, nextTripId, {
+        status: "cancelled",
+        cancelReason: "Declined by driver"
+      });
+      setResult(`Trip declined (${nextTripId}).`);
+      await loadIncomingTrips();
+    } catch (err) {
+      setError(handleApiError(err, "Failed to decline trip."));
     }
   }
 
@@ -121,7 +189,7 @@ export function RiderHomeScreen({ onRoleAuthError }: RiderHomeScreenProps) {
     setError("");
     setResult("");
     try {
-      await updateRiderTripStatusWithReason(activeSession.accessToken, tripId.trim(), {
+      await updateRiderTripStatusWithReason(accessToken, tripId.trim(), {
         status: tripStatus,
         cancelReason: tripStatus === "cancelled" ? cancelReason.trim() : undefined
       });
@@ -135,7 +203,7 @@ export function RiderHomeScreen({ onRoleAuthError }: RiderHomeScreenProps) {
     setError("");
     setResult("");
     try {
-      await cancelRiderTrip(activeSession.accessToken, cancelTripId.trim(), cancelReason.trim());
+      await cancelRiderTrip(accessToken, cancelTripId.trim(), cancelReason.trim());
       setResult("Trip cancelled.");
     } catch (err) {
       setError(handleApiError(err, "Failed to cancel trip."));
@@ -146,7 +214,7 @@ export function RiderHomeScreen({ onRoleAuthError }: RiderHomeScreenProps) {
     setHistoryLoading(true);
     setError("");
     try {
-      const response = await getRiderTripHistory(activeSession.accessToken, { limit: 10 });
+      const response = await getRiderTripHistory(accessToken, { limit: 10 });
       const trips = ((response?.data?.trips ?? []) as RiderHistoryItem[]);
       setHistory(trips);
     } catch (err) {
@@ -165,7 +233,7 @@ export function RiderHomeScreen({ onRoleAuthError }: RiderHomeScreenProps) {
     setError("");
     setResult("");
     try {
-      const response = await getRiderTripLive(activeSession.accessToken, liveTripId.trim());
+      const response = await getRiderTripLive(accessToken, liveTripId.trim());
       setLiveSnapshot(JSON.stringify(response?.data ?? response, null, 2));
     } catch (err) {
       setError(handleApiError(err, "Failed to load live trip."));
@@ -173,12 +241,12 @@ export function RiderHomeScreen({ onRoleAuthError }: RiderHomeScreenProps) {
   }
 
   useEffect(() => {
-    if (!liveTracking || !liveTripId.trim()) return;
+    if (!session || !liveTracking || !liveTripId.trim()) return;
 
     let active = true;
     const execute = async () => {
       try {
-        const response = await getRiderTripLive(activeSession.accessToken, liveTripId.trim());
+        const response = await getRiderTripLive(accessToken, liveTripId.trim());
         if (active) {
           setLiveSnapshot(JSON.stringify(response?.data ?? response, null, 2));
         }
@@ -198,7 +266,7 @@ export function RiderHomeScreen({ onRoleAuthError }: RiderHomeScreenProps) {
       active = false;
       clearInterval(timer);
     };
-  }, [activeSession.accessToken, liveTracking, liveTripId]);
+  }, [accessToken, handleApiError, liveTracking, liveTripId, session]);
 
   async function submitRating() {
     const numeric = Number(ratingValue);
@@ -210,11 +278,11 @@ export function RiderHomeScreen({ onRoleAuthError }: RiderHomeScreenProps) {
     setError("");
     setResult("");
     try {
-      await rateRiderTrip(activeSession.accessToken, ratingTripId.trim(), {
+      await rateRiderTrip(accessToken, ratingTripId.trim(), {
         rating: numeric,
         feedback: ratingFeedback.trim() || undefined
       });
-      setResult("Passenger rating submitted.");
+      setResult("Rider rating submitted.");
     } catch (err) {
       setError(handleApiError(err, "Failed to submit rating."));
     }
@@ -227,7 +295,7 @@ export function RiderHomeScreen({ onRoleAuthError }: RiderHomeScreenProps) {
       return;
     }
     try {
-      const response = await getRiderTripReceipt(activeSession.accessToken, receiptTripId);
+      const response = await getRiderTripReceipt(accessToken, receiptTripId);
       const riderEarnings = Number(response?.data?.earnings?.riderEarningsMinor ?? 0);
       const computedTipMinor = Math.round(riderEarnings * 0.1);
       setTipMinor(computedTipMinor);
@@ -238,24 +306,24 @@ export function RiderHomeScreen({ onRoleAuthError }: RiderHomeScreenProps) {
     }
   }
 
-  async function loadTripChat() {
+  const loadTripChat = useCallback(async () => {
     if (!chatTripId.trim()) {
       setError("Trip ID is required for chat.");
       return;
     }
     try {
-      const response = await listTripChatMessages(activeSession.accessToken, chatTripId.trim());
-      const rows = (response?.data?.messages ?? []) as Array<{ id: string; senderRole?: string; body?: string }>;
+      const response = await listTripChatMessages(accessToken, chatTripId.trim());
+      const rows = (response?.data?.messages ?? []) as { id: string; senderRole?: string; body?: string }[];
       setChatMessages(rows);
     } catch (err) {
       setError(handleApiError(err, "Failed to load trip chat."));
     }
-  }
+  }, [accessToken, chatTripId, handleApiError]);
 
   async function postTripChatMessage() {
     if (!chatTripId.trim() || !chatMessageInput.trim()) return;
     try {
-      await sendTripChatMessage(activeSession.accessToken, chatTripId.trim(), chatMessageInput.trim());
+      await sendTripChatMessage(accessToken, chatTripId.trim(), chatMessageInput.trim());
       setChatMessageInput("");
       await loadTripChat();
     } catch (err) {
@@ -264,25 +332,69 @@ export function RiderHomeScreen({ onRoleAuthError }: RiderHomeScreenProps) {
   }
 
   useEffect(() => {
+    if (!session) return;
     if (!chatLive || !chatTripId.trim()) {
       setChatMode("idle");
       return;
     }
 
     void loadTripChat();
-    const unsubscribe = subscribeTripChatEvents(activeSession.accessToken, "rider", chatTripId.trim(), {
+    const unsubscribe = subscribeTripChatEvents(accessToken, "rider", chatTripId.trim(), {
       onRefreshRequired: () => {
         void loadTripChat();
       },
       onMode: (mode) => setChatMode(mode)
     });
     return unsubscribe;
-  }, [activeSession.accessToken, chatLive, chatTripId]);
+  }, [accessToken, chatLive, chatTripId, loadTripChat, session]);
+
+  useEffect(() => {
+    if (!session) return;
+    void loadIncomingTrips();
+  }, [loadIncomingTrips, session]);
+
+  useEffect(() => {
+    if (!session || availability !== "online") return;
+    const timer = setInterval(() => {
+      void loadIncomingTrips();
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [availability, loadIncomingTrips, session]);
+
+  if (!session) return null;
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>Driver Home</Text>
-      <Text style={styles.subtitle}>{activeSession.user.email}</Text>
+      <Text style={styles.subtitle}>{userEmail}</Text>
+
+      <View style={styles.card}>
+        <Text style={styles.sectionTitle}>Incoming Ride Requests</Text>
+        <TouchableOpacity style={styles.button} onPress={() => void loadIncomingTrips()}>
+          <Text style={styles.buttonText}>{incomingLoading ? "Loading..." : "Refresh Requests"}</Text>
+        </TouchableOpacity>
+        {incomingTrips.length === 0 ? (
+          <Text style={styles.muted}>No pending requests assigned yet.</Text>
+        ) : (
+          incomingTrips.map((trip) => (
+            <View key={trip.id} style={styles.historyItem}>
+              <Text style={styles.historyTitle}>
+                {trip.passenger?.user?.fullName ?? "Passenger"} | {(trip.fareTotalMinor / 100).toFixed(2)}
+              </Text>
+              <Text style={styles.muted}>{trip.pickupAddress} {"->"} {trip.dropoffAddress}</Text>
+              <Text style={styles.muted}>Requested: {new Date(trip.requestedAt).toLocaleString()}</Text>
+              <View style={styles.row}>
+                <TouchableOpacity style={styles.button} onPress={() => void acceptIncomingTrip(trip.id)}>
+                  <Text style={styles.buttonText}>Accept</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.secondaryButton} onPress={() => void declineIncomingTrip(trip.id)}>
+                  <Text style={styles.secondaryButtonText}>Decline</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ))
+        )}
+      </View>
 
       <View style={styles.card}>
         <Text style={styles.sectionTitle}>Current Status</Text>
@@ -341,17 +453,36 @@ export function RiderHomeScreen({ onRoleAuthError }: RiderHomeScreenProps) {
 
       <View style={styles.card}>
         <Text style={styles.sectionTitle}>Navigation</Text>
-        <MapView style={styles.map} initialRegion={mapRegion} region={mapRegion}>
-          {liveParsed?.latestPing?.lat != null && liveParsed?.latestPing?.lng != null ? (
-            <Marker coordinate={{ latitude: liveParsed.latestPing.lat, longitude: liveParsed.latestPing.lng }} title="You" pinColor="blue" />
-          ) : null}
-          {liveParsed?.trip?.pickupLat != null && liveParsed?.trip?.pickupLng != null ? (
-            <Marker coordinate={{ latitude: liveParsed.trip.pickupLat, longitude: liveParsed.trip.pickupLng }} title="Pickup" pinColor="green" />
-          ) : null}
-          {liveParsed?.trip?.dropoffLat != null && liveParsed?.trip?.dropoffLng != null ? (
-            <Marker coordinate={{ latitude: liveParsed.trip.dropoffLat, longitude: liveParsed.trip.dropoffLng }} title="Destination" pinColor="red" />
-          ) : null}
-        </MapView>
+        <AppMap
+          region={mapRegion}
+          height={240}
+          markers={[
+            ...(liveParsed?.latestPing?.lat != null && liveParsed?.latestPing?.lng != null
+              ? [{
+                  key: "you",
+                  coordinate: { latitude: liveParsed.latestPing.lat, longitude: liveParsed.latestPing.lng },
+                  title: "You",
+                  pinColor: "blue"
+                }]
+              : []),
+            ...(liveParsed?.trip?.pickupLat != null && liveParsed?.trip?.pickupLng != null
+              ? [{
+                  key: "pickup",
+                  coordinate: { latitude: liveParsed.trip.pickupLat, longitude: liveParsed.trip.pickupLng },
+                  title: "Pickup",
+                  pinColor: "green"
+                }]
+              : []),
+            ...(liveParsed?.trip?.dropoffLat != null && liveParsed?.trip?.dropoffLng != null
+              ? [{
+                  key: "dropoff",
+                  coordinate: { latitude: liveParsed.trip.dropoffLat, longitude: liveParsed.trip.dropoffLng },
+                  title: "Destination",
+                  pinColor: "red"
+                }]
+              : [])
+          ]}
+        />
         <Text style={styles.muted}>ETA to pickup: {liveParsed?.eta?.toPickupMin ?? "-"} min</Text>
         <Text style={styles.muted}>ETA to dropoff: {liveParsed?.eta?.toDropoffMin ?? "-"} min</Text>
       </View>
@@ -374,7 +505,7 @@ export function RiderHomeScreen({ onRoleAuthError }: RiderHomeScreenProps) {
           <View key={trip.id} style={styles.historyItem}>
             <Text style={styles.historyTitle}>{trip.status.toUpperCase()} | {(trip.fareTotalMinor / 100).toFixed(2)}</Text>
             <Text style={styles.muted}>{trip.pickupAddress} {"->"} {trip.dropoffAddress}</Text>
-            <Text style={styles.muted}>Passenger: {trip.passenger?.user?.fullName ?? "-"}</Text>
+            <Text style={styles.muted}>Rider: {trip.passenger?.user?.fullName ?? "-"}</Text>
           </View>
         ))}
       </View>
@@ -409,7 +540,7 @@ export function RiderHomeScreen({ onRoleAuthError }: RiderHomeScreenProps) {
       </View>
 
       <View style={styles.card}>
-        <Text style={styles.sectionTitle}>Rate Passenger</Text>
+        <Text style={styles.sectionTitle}>Rate Rider</Text>
         <TextInput style={styles.input} value={ratingTripId} onChangeText={setRatingTripId} placeholder="Completed Trip ID" />
         <TextInput style={styles.input} value={ratingValue} onChangeText={setRatingValue} keyboardType="numeric" placeholder="Rating (1-5)" />
         <TextInput style={styles.input} value={ratingFeedback} onChangeText={setRatingFeedback} placeholder="Feedback (optional)" />
@@ -516,10 +647,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     height: 44
   },
-  map: {
-    height: 240,
-    borderRadius: 12
-  },
   row: {
     flexDirection: "row",
     gap: 8
@@ -582,6 +709,9 @@ const styles = StyleSheet.create({
   ghostButtonText: {
     color: "#0f1f33",
     fontWeight: "700"
+  },
+  muted: {
+    color: "#5a6f8a"
   },
   historyItem: {
     borderWidth: 1,

@@ -1,5 +1,5 @@
 import React from "react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Animated, Easing, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 type NoticeTone = "success" | "error" | "warning";
@@ -24,7 +24,7 @@ export function NoticeBanner({ message, tone, autoDismissMs = 3200 }: NoticeBann
       opacity.setValue(0);
       translateY.setValue(-6);
     }
-  }, [message]);
+  }, [message, opacity, translateY]);
 
   useEffect(() => {
     if (!visibleMessage || isAnimatingOut) return;
@@ -44,7 +44,7 @@ export function NoticeBanner({ message, tone, autoDismissMs = 3200 }: NoticeBann
     ]).start();
   }, [isAnimatingOut, opacity, translateY, visibleMessage]);
 
-  function dismissBanner() {
+  const dismissBanner = useCallback(() => {
     if (!visibleMessage || isAnimatingOut) return;
     setIsAnimatingOut(true);
     Animated.parallel([
@@ -64,7 +64,7 @@ export function NoticeBanner({ message, tone, autoDismissMs = 3200 }: NoticeBann
       setVisibleMessage("");
       setIsAnimatingOut(false);
     });
-  }
+  }, [isAnimatingOut, opacity, translateY, visibleMessage]);
 
   useEffect(() => {
     if (tone !== "success" || !visibleMessage) return;
@@ -72,7 +72,7 @@ export function NoticeBanner({ message, tone, autoDismissMs = 3200 }: NoticeBann
       dismissBanner();
     }, autoDismissMs);
     return () => clearTimeout(timer);
-  }, [autoDismissMs, tone, visibleMessage]);
+  }, [autoDismissMs, dismissBanner, tone, visibleMessage]);
 
   if (!visibleMessage) return null;
   const isPersistent = tone === "error" || tone === "warning";

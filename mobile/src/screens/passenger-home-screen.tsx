@@ -1,8 +1,8 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
-import MapView, { Marker } from "react-native-maps";
 import { cancelPassengerTrip, estimatePassengerFare, getPassengerTripHistory, getPassengerTripLive, getPassengerTripReceipt, listTripChatMessages, ratePassengerTrip, requestPassengerTrip, searchNearbyRiders, sendTripChatMessage, subscribeTripChatEvents } from "../lib/api";
 import { isAuthOrRoleError, toApiErrorMessage } from "../lib/api-errors";
+import { AppMap } from "../components/app-map";
 import { NoticeBanner } from "../components/notice-banner";
 import { estimateRoute, geocodeAddress } from "../lib/maps";
 import { useAuth } from "../state/auth-context";
@@ -38,6 +38,8 @@ type PassengerHomeScreenProps = {
 
 export function PassengerHomeScreen({ onRoleAuthError }: PassengerHomeScreenProps) {
   const { session } = useAuth();
+  const accessToken = session?.accessToken ?? "";
+  const userEmail = session?.user.email ?? "";
   const [pickupAddress, setPickupAddress] = useState("");
   const [dropoffAddress, setDropoffAddress] = useState("");
   const [pickup, setPickup] = useState<Pin | null>(null);
@@ -61,7 +63,7 @@ export function PassengerHomeScreen({ onRoleAuthError }: PassengerHomeScreenProp
   const [completedFareMinor, setCompletedFareMinor] = useState<number | null>(null);
   const [receiptId, setReceiptId] = useState("");
   const [chatTripId, setChatTripId] = useState("");
-  const [chatMessages, setChatMessages] = useState<Array<{ id: string; senderRole?: string; body?: string }>>([]);
+  const [chatMessages, setChatMessages] = useState<{ id: string; senderRole?: string; body?: string }[]>([]);
   const [chatMessageInput, setChatMessageInput] = useState("");
   const [chatLive, setChatLive] = useState(false);
   const [chatMode, setChatMode] = useState<"idle" | "stream" | "fallback">("idle");
@@ -92,15 +94,13 @@ export function PassengerHomeScreen({ onRoleAuthError }: PassengerHomeScreenProp
     }
   }, [liveSnapshot]);
 
-  if (!session) return null;
-  const activeSession = session;
-  function handleApiError(err: unknown, fallback: string) {
+  const handleApiError = useCallback((err: unknown, fallback: string) => {
     if (isAuthOrRoleError(err)) {
       onRoleAuthError?.();
       return "Session access issue detected. Open Profile tab to switch role or log in again.";
     }
     return toApiErrorMessage(err, fallback);
-  }
+  }, [onRoleAuthError]);
 
   async function resolvePickup() {
     setError("");
@@ -125,7 +125,7 @@ export function PassengerHomeScreen({ onRoleAuthError }: PassengerHomeScreenProp
     setResult("");
     try {
       const [nearbyResult, route] = await Promise.all([
-        searchNearbyRiders(activeSession.accessToken, {
+        searchNearbyRiders(accessToken, {
           lat: pickup.lat,
           lng: pickup.lng,
           radiusKm: 5,
@@ -134,7 +134,7 @@ export function PassengerHomeScreen({ onRoleAuthError }: PassengerHomeScreenProp
         estimateRoute(pickup, dropoff)
       ]);
 
-      const fareResult = await estimatePassengerFare(activeSession.accessToken, {
+      const fareResult = await estimatePassengerFare(accessToken, {
         estimatedDistanceKm: route.distanceKm,
         estimatedDurationMin: route.durationMin
       });
@@ -143,9 +143,9 @@ export function PassengerHomeScreen({ onRoleAuthError }: PassengerHomeScreenProp
       setDistanceKm(route.distanceKm);
       setDurationMin(route.durationMin);
       setFareTotalMinor(fareResult.data?.fare?.totalMinor ?? null);
-      setResult("Nearby riders and fare estimate loaded.");
+      setResult("Nearby drivers and fare estimate loaded.");
     } catch (err) {
-      setError(handleApiError(err, "Unable to search riders."));
+      setError(handleApiError(err, "Unable to search drivers."));
     } finally {
       setLoading(false);
     }
@@ -153,7 +153,7 @@ export function PassengerHomeScreen({ onRoleAuthError }: PassengerHomeScreenProp
 
   async function onRequestTrip() {
     if (!pickup || !dropoff || !distanceKm || !durationMin) {
-      setError("Search riders and fare first.");
+      setError("Search drivers and fare first.");
       return;
     }
 
@@ -161,7 +161,7 @@ export function PassengerHomeScreen({ onRoleAuthError }: PassengerHomeScreenProp
     setError("");
     setResult("");
     try {
-      const response = await requestPassengerTrip(activeSession.accessToken, {
+      const response = await requestPassengerTrip(accessToken, {
         pickupAddress: pickupAddress.trim(),
         dropoffAddress: dropoffAddress.trim(),
         pickupLat: pickup.lat,
@@ -191,7 +191,7 @@ export function PassengerHomeScreen({ onRoleAuthError }: PassengerHomeScreenProp
     setError("");
     setResult("");
     try {
-      await cancelPassengerTrip(activeSession.accessToken, cancelTripId.trim(), cancelReason.trim());
+      await cancelPassengerTrip(accessToken, cancelTripId.trim(), cancelReason.trim());
       setResult("Trip cancelled.");
     } catch (err) {
       setError(handleApiError(err, "Failed to cancel trip."));
@@ -204,7 +204,7 @@ export function PassengerHomeScreen({ onRoleAuthError }: PassengerHomeScreenProp
     setHistoryLoading(true);
     setError("");
     try {
-      const response = await getPassengerTripHistory(activeSession.accessToken, { limit: 10 });
+      const response = await getPassengerTripHistory(accessToken, { limit: 10 });
       const trips = ((response?.data?.trips ?? []) as PassengerHistoryItem[]);
       setHistory(trips);
     } catch (err) {
@@ -223,7 +223,7 @@ export function PassengerHomeScreen({ onRoleAuthError }: PassengerHomeScreenProp
     setError("");
     setResult("");
     try {
-      const response = await getPassengerTripLive(activeSession.accessToken, liveTripId.trim());
+      const response = await getPassengerTripLive(accessToken, liveTripId.trim());
       setLiveSnapshot(JSON.stringify(response?.data ?? response, null, 2));
     } catch (err) {
       setError(handleApiError(err, "Failed to load live trip."));
@@ -231,12 +231,12 @@ export function PassengerHomeScreen({ onRoleAuthError }: PassengerHomeScreenProp
   }
 
   useEffect(() => {
-    if (!liveTracking || !liveTripId.trim()) return;
+    if (!session || !liveTracking || !liveTripId.trim()) return;
 
     let active = true;
     const execute = async () => {
       try {
-        const response = await getPassengerTripLive(activeSession.accessToken, liveTripId.trim());
+        const response = await getPassengerTripLive(accessToken, liveTripId.trim());
         if (active) {
           setLiveSnapshot(JSON.stringify(response?.data ?? response, null, 2));
         }
@@ -256,7 +256,7 @@ export function PassengerHomeScreen({ onRoleAuthError }: PassengerHomeScreenProp
       active = false;
       clearInterval(timer);
     };
-  }, [activeSession.accessToken, liveTracking, liveTripId]);
+  }, [accessToken, handleApiError, liveTracking, liveTripId, session]);
 
   async function submitRating() {
     const numeric = Number(ratingValue);
@@ -268,11 +268,11 @@ export function PassengerHomeScreen({ onRoleAuthError }: PassengerHomeScreenProp
     setError("");
     setResult("");
     try {
-      await ratePassengerTrip(activeSession.accessToken, ratingTripId.trim(), {
+      await ratePassengerTrip(accessToken, ratingTripId.trim(), {
         rating: numeric,
         feedback: ratingFeedback.trim() || undefined
       });
-      setResult("Rider rating submitted.");
+      setResult("Driver rating submitted.");
     } catch (err) {
       setError(handleApiError(err, "Failed to submit rating."));
     }
@@ -290,7 +290,7 @@ export function PassengerHomeScreen({ onRoleAuthError }: PassengerHomeScreenProp
     if (history[0]?.id) {
       void (async () => {
         try {
-          const receipt = await getPassengerTripReceipt(activeSession.accessToken, history[0].id);
+          const receipt = await getPassengerTripReceipt(accessToken, history[0].id);
           const paymentId = receipt?.data?.payment?.id as string | undefined;
           setReceiptId(paymentId ? `RCPT-${paymentId.slice(0, 8)}` : `RCPT-${Date.now()}`);
         } catch {
@@ -302,24 +302,24 @@ export function PassengerHomeScreen({ onRoleAuthError }: PassengerHomeScreenProp
     }
   }
 
-  async function loadTripChat() {
+  const loadTripChat = useCallback(async () => {
     if (!chatTripId.trim()) {
       setError("Trip ID is required for chat.");
       return;
     }
     try {
-      const response = await listTripChatMessages(activeSession.accessToken, chatTripId.trim());
-      const rows = (response?.data?.messages ?? []) as Array<{ id: string; senderRole?: string; body?: string }>;
+      const response = await listTripChatMessages(accessToken, chatTripId.trim());
+      const rows = (response?.data?.messages ?? []) as { id: string; senderRole?: string; body?: string }[];
       setChatMessages(rows);
     } catch (err) {
       setError(handleApiError(err, "Failed to load trip chat."));
     }
-  }
+  }, [accessToken, chatTripId, handleApiError]);
 
   async function postTripChatMessage() {
     if (!chatTripId.trim() || !chatMessageInput.trim()) return;
     try {
-      await sendTripChatMessage(activeSession.accessToken, chatTripId.trim(), chatMessageInput.trim());
+      await sendTripChatMessage(accessToken, chatTripId.trim(), chatMessageInput.trim());
       setChatMessageInput("");
       await loadTripChat();
     } catch (err) {
@@ -328,13 +328,14 @@ export function PassengerHomeScreen({ onRoleAuthError }: PassengerHomeScreenProp
   }
 
   useEffect(() => {
+    if (!session) return;
     if (!chatLive || !chatTripId.trim()) {
       setChatMode("idle");
       return;
     }
 
     void loadTripChat();
-    const unsubscribe = subscribeTripChatEvents(activeSession.accessToken, "passenger", chatTripId.trim(), {
+    const unsubscribe = subscribeTripChatEvents(accessToken, "passenger", chatTripId.trim(), {
       onRefreshRequired: () => {
         void loadTripChat();
       },
@@ -342,12 +343,14 @@ export function PassengerHomeScreen({ onRoleAuthError }: PassengerHomeScreenProp
     });
 
     return unsubscribe;
-  }, [activeSession.accessToken, chatLive, chatTripId]);
+  }, [accessToken, chatLive, chatTripId, loadTripChat, session]);
+
+  if (!session) return null;
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>Rider Home</Text>
-      <Text style={styles.subtitle}>{activeSession.user.email}</Text>
+      <Text style={styles.subtitle}>{userEmail}</Text>
 
       <View style={styles.card}>
         <Text style={styles.sectionTitle}>Where to?</Text>
@@ -371,18 +374,24 @@ export function PassengerHomeScreen({ onRoleAuthError }: PassengerHomeScreenProp
           <Text style={styles.secondaryButtonText}>Set Dropoff</Text>
         </TouchableOpacity>
 
-        <MapView style={styles.map} initialRegion={region} region={region}>
-          {pickup ? <Marker coordinate={{ latitude: pickup.lat, longitude: pickup.lng }} title="Pickup" pinColor="green" /> : null}
-          {dropoff ? <Marker coordinate={{ latitude: dropoff.lat, longitude: dropoff.lng }} title="Dropoff" pinColor="red" /> : null}
-          {riders.map((rider) => (
-            <Marker
-              key={rider.id}
-              coordinate={{ latitude: rider.lat, longitude: rider.lng }}
-              title={rider.user.fullName}
-              description={`${rider.distanceKm} km away`}
-            />
-          ))}
-        </MapView>
+        <AppMap
+          region={region}
+          height={280}
+          markers={[
+            ...(pickup
+              ? [{ key: "pickup", coordinate: { latitude: pickup.lat, longitude: pickup.lng }, title: "Pickup", pinColor: "green" }]
+              : []),
+            ...(dropoff
+              ? [{ key: "dropoff", coordinate: { latitude: dropoff.lat, longitude: dropoff.lng }, title: "Dropoff", pinColor: "red" }]
+              : []),
+            ...riders.map((rider) => ({
+              key: rider.id,
+              coordinate: { latitude: rider.lat, longitude: rider.lng },
+              title: rider.user.fullName,
+              description: `${rider.distanceKm} km away`
+            }))
+          ]}
+        />
 
         <Text style={styles.sectionTitle}>Vehicle Options</Text>
         <View style={styles.row}>
@@ -394,7 +403,7 @@ export function PassengerHomeScreen({ onRoleAuthError }: PassengerHomeScreenProp
         </View>
 
         <TouchableOpacity style={styles.button} onPress={() => void searchRidersAndEstimateFare()} disabled={loading}>
-          <Text style={styles.buttonText}>{loading ? "Loading..." : "Search Riders + Estimate Fare"}</Text>
+          <Text style={styles.buttonText}>{loading ? "Loading..." : "Search Drivers + Estimate Fare"}</Text>
         </TouchableOpacity>
 
         {distanceKm != null && durationMin != null ? (
@@ -444,7 +453,7 @@ export function PassengerHomeScreen({ onRoleAuthError }: PassengerHomeScreenProp
             <Text style={styles.historyTitle}>{trip.status.toUpperCase()} | {(trip.fareTotalMinor / 100).toFixed(2)}</Text>
             <Text style={styles.muted}>{trip.pickupAddress} {"->"} {trip.dropoffAddress}</Text>
             <Text style={styles.muted}>
-              Rider: {trip.rider?.user?.fullName ?? "-"} {trip.rider?.vehiclePlate ? `(${trip.rider.vehiclePlate})` : ""}
+              Driver: {trip.rider?.user?.fullName ?? "-"} {trip.rider?.vehiclePlate ? `(${trip.rider.vehiclePlate})` : ""}
             </Text>
           </View>
         ))}
@@ -488,7 +497,7 @@ export function PassengerHomeScreen({ onRoleAuthError }: PassengerHomeScreenProp
       </View>
 
       <View style={styles.card}>
-        <Text style={styles.sectionTitle}>Rate Rider</Text>
+        <Text style={styles.sectionTitle}>Rate Driver</Text>
         <TextInput style={styles.input} value={ratingTripId} onChangeText={setRatingTripId} placeholder="Completed Trip ID" />
         <TextInput style={styles.input} value={ratingValue} onChangeText={setRatingValue} keyboardType="numeric" placeholder="Rating (1-5)" />
         <TextInput style={styles.input} value={ratingFeedback} onChangeText={setRatingFeedback} placeholder="Feedback (optional)" />
@@ -574,10 +583,6 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 12,
     height: 44
-  },
-  map: {
-    height: 280,
-    borderRadius: 12
   },
   row: {
     flexDirection: "row",

@@ -86,7 +86,38 @@ type MonitoringResponse = {
       channel: string;
       direction: string;
       body: string;
+      metadata?: {
+        reportType?: string;
+        tripId?: string | null;
+        driverId?: string | null;
+        paymentTransactionId?: string | null;
+      } | null;
       createdAt: string;
+    }>;
+    driverEnrollments: Array<{
+      id: string;
+      createdAt: string;
+      riderProfileId: string | null;
+      user: { id: string; fullName: string; email: string; phoneNumber: string | null } | null;
+      firstName: string | null;
+      middleName: string | null;
+      lastName: string | null;
+      address: string | null;
+      phoneNumber: string | null;
+      whatsappNumber: string | null;
+      identificationType: string | null;
+      dateOfBirth: string | null;
+      mothersMaidenName: string | null;
+      carName: string | null;
+      carModel: string | null;
+      carYear: number | null;
+      carCondition: string | null;
+      vehiclePlate: string | null;
+      livenessConfirmed: boolean;
+      verificationStatus: "pending" | "verified";
+      verifiedAt: string | null;
+      invitedAt: string | null;
+      invitedChannel: string | null;
     }>;
     riderLocationPings: Array<{
       id: string;
@@ -160,6 +191,7 @@ export function TenantOpsConsole() {
   const [lastUpdatedAt, setLastUpdatedAt] = useState<string>("");
   const [streamState, setStreamState] = useState<"connecting" | "live" | "fallback">("connecting");
   const [approveResult, setApproveResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const [enrollmentResult, setEnrollmentResult] = useState<{ ok: boolean; message: string } | null>(null);
 
   const query = useMemo(() => {
     const params = new URLSearchParams({
@@ -293,6 +325,50 @@ export function TenantOpsConsole() {
     }
   }
 
+  async function verifyDriverEnrollment(riderId: string) {
+    if (!accessToken.trim()) return;
+    setEnrollmentResult(null);
+    try {
+      const response = await fetch(`/api/tenant/riders/${riderId}/verify-enrollment`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${accessToken.trim()}` }
+      });
+      if (!response.ok) {
+        const body = (await response.json()) as ErrorResponse;
+        setEnrollmentResult({ ok: false, message: body.error?.message ?? `Verification failed (${response.status})` });
+        return;
+      }
+      setEnrollmentResult({ ok: true, message: "Driver enrollment verified." });
+      await loadData();
+    } catch {
+      setEnrollmentResult({ ok: false, message: "Network error while verifying enrollment." });
+    }
+  }
+
+  async function inviteDriverInspection(riderId: string, channel: "email" | "sms") {
+    if (!accessToken.trim()) return;
+    setEnrollmentResult(null);
+    try {
+      const response = await fetch(`/api/tenant/riders/${riderId}/invite-inspection`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${accessToken.trim()}`,
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({ channel })
+      });
+      if (!response.ok) {
+        const body = (await response.json()) as ErrorResponse;
+        setEnrollmentResult({ ok: false, message: body.error?.message ?? `Invite failed (${response.status})` });
+        return;
+      }
+      setEnrollmentResult({ ok: true, message: `Inspection invite queued via ${channel}.` });
+      await loadData();
+    } catch {
+      setEnrollmentResult({ ok: false, message: "Network error while sending inspection invite." });
+    }
+  }
+
   if (!sessionReady) {
     return <p className="muted">Redirecting to login...</p>;
   }
@@ -341,15 +417,16 @@ export function TenantOpsConsole() {
 
       {error ? <p className="status-error">{error}</p> : null}
       {approveResult ? <p className={approveResult.ok ? "status-ok" : "status-error"}>{approveResult.message}</p> : null}
-      {!snapshot ? <p className="muted">Loading riders, passengers, ride records, logs, and analytics.</p> : null}
+      {enrollmentResult ? <p className={enrollmentResult.ok ? "status-ok" : "status-error"}>{enrollmentResult.message}</p> : null}
+      {!snapshot ? <p className="muted">Loading drivers, riders, ride records, logs, and analytics.</p> : null}
 
       {snapshot ? (
         <>
           <div className="grid">
             <div className="card"><strong>Active Trips</strong><p>{snapshot.summary.activeTripsCount}</p></div>
-            <div className="card"><strong>Online Riders</strong><p>{snapshot.summary.onlineRiders}</p></div>
-            <div className="card"><strong>Riders Registered</strong><p>{snapshot.summary.totalRiders}</p></div>
-            <div className="card"><strong>Passengers Registered</strong><p>{snapshot.summary.totalPassengers}</p></div>
+            <div className="card"><strong>Online Drivers</strong><p>{snapshot.summary.onlineRiders}</p></div>
+            <div className="card"><strong>Drivers Registered</strong><p>{snapshot.summary.totalRiders}</p></div>
+            <div className="card"><strong>Riders Registered</strong><p>{snapshot.summary.totalPassengers}</p></div>
             <div className="card"><strong>Completed Today</strong><p>{snapshot.summary.completedToday}</p></div>
             <div className="card"><strong>Cancelled Today</strong><p>{snapshot.summary.cancelledToday}</p></div>
             <div className="card"><strong>Captured Payments</strong><p>{snapshot.summary.capturedPayments}</p></div>
@@ -360,7 +437,7 @@ export function TenantOpsConsole() {
           <div className="section-block">
             <h3>Active Trips Monitoring</h3>
             <table className="data-table">
-              <thead><tr><th>Trip</th><th>Status</th><th>Rider</th><th>Passenger</th><th>Route</th><th>Requested</th></tr></thead>
+              <thead><tr><th>Trip</th><th>Status</th><th>Driver</th><th>Rider</th><th>Route</th><th>Requested</th></tr></thead>
               <tbody>
                 {snapshot.activeTrips.map((trip) => (
                   <tr key={trip.id}>
@@ -377,13 +454,13 @@ export function TenantOpsConsole() {
           </div>
 
           <div className="section-block">
-            <h3>Riders and Passengers Registry</h3>
+            <h3>Drivers and Riders Registry</h3>
             <table className="data-table">
               <thead><tr><th>Type</th><th>Name</th><th>Email</th><th>Status</th><th>Detail</th><th>Action</th><th>Joined</th></tr></thead>
               <tbody>
                 {snapshot.riders.map((rider) => (
                   <tr key={`r-${rider.id}`}>
-                    <td>rider</td>
+                    <td>driver</td>
                     <td>{rider.user.fullName}</td>
                     <td>{rider.user.email}</td>
                     <td>{rider.availability}</td>
@@ -400,7 +477,7 @@ export function TenantOpsConsole() {
                 ))}
                 {snapshot.passengers.map((passenger) => (
                   <tr key={`p-${passenger.id}`}>
-                    <td>passenger</td>
+                    <td>rider</td>
                     <td>{passenger.user.fullName}</td>
                     <td>{passenger.user.email}</td>
                     <td>{passenger.user.status}</td>
@@ -414,9 +491,93 @@ export function TenantOpsConsole() {
           </div>
 
           <div className="section-block">
+            <h3>Driver Enrollment Verification</h3>
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Driver</th>
+                  <th>Contact</th>
+                  <th>ID + DOB</th>
+                  <th>Address + Vehicle</th>
+                  <th>Liveness</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {snapshot.driverEnrollments.map((item) => (
+                  <tr key={item.id}>
+                    <td>
+                      <strong>{(item.user?.fullName ?? `${item.firstName ?? ""} ${item.lastName ?? ""}`.trim()) || "-"}</strong>
+                      <br />
+                      <span className="muted">Submitted: {new Date(item.createdAt).toLocaleString()}</span>
+                    </td>
+                    <td>
+                      Email: {item.user?.email ?? "-"}
+                      <br />
+                      Phone: {item.phoneNumber ?? "-"}
+                      <br />
+                      WhatsApp: {item.whatsappNumber ?? "-"}
+                    </td>
+                    <td>
+                      {item.identificationType ?? "-"}
+                      <br />
+                      DOB: {item.dateOfBirth ?? "-"}
+                      <br />
+                      Mother: {item.mothersMaidenName ?? "-"}
+                    </td>
+                    <td>
+                      {item.address ?? "-"}
+                      <br />
+                      {item.carName ?? "-"} {item.carModel ?? "-"} {item.carYear ?? "-"}
+                      <br />
+                      {item.carCondition ?? "-"} | Plate: {item.vehiclePlate ?? "-"}
+                    </td>
+                    <td>{item.livenessConfirmed ? "passed" : "missing"}</td>
+                    <td>
+                      {item.verificationStatus}
+                      <br />
+                      <span className="muted">Invite: {item.invitedAt ? `${new Date(item.invitedAt).toLocaleString()} (${item.invitedChannel ?? "-"})` : "pending"}</span>
+                    </td>
+                    <td>
+                      {item.riderProfileId ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => void verifyDriverEnrollment(item.riderProfileId!)}
+                            disabled={item.verificationStatus === "verified"}
+                          >
+                            Verify
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void inviteDriverInspection(item.riderProfileId!, "email")}
+                            disabled={item.verificationStatus !== "verified"}
+                          >
+                            Invite Email
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void inviteDriverInspection(item.riderProfileId!, "sms")}
+                            disabled={item.verificationStatus !== "verified"}
+                          >
+                            Invite SMS
+                          </button>
+                        </>
+                      ) : (
+                        <span className="muted">No rider profile</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="section-block">
             <h3>Trip and Payment History</h3>
             <table className="data-table">
-              <thead><tr><th>Trip</th><th>Status</th><th>Rider</th><th>Passenger</th><th>Fare</th><th>Requested</th><th>Closed</th></tr></thead>
+              <thead><tr><th>Trip</th><th>Status</th><th>Driver</th><th>Rider</th><th>Fare</th><th>Requested</th><th>Closed</th></tr></thead>
               <tbody>
                 {snapshot.tripHistory.map((trip) => (
                   <tr key={trip.id}>
@@ -491,7 +652,18 @@ export function TenantOpsConsole() {
                   <tr key={`a-${item.id}`}><td>analytics</td><td>{item.metricKey}</td><td>{item.metricValue}</td><td>{new Date(item.metricDate).toLocaleDateString()}</td><td>{new Date(item.metricDate).toLocaleString()}</td></tr>
                 ))}
                 {snapshot.supportCommunications.map((item) => (
-                  <tr key={`m-${item.id}`}><td>support-msg</td><td>{item.channel}</td><td>{item.direction}</td><td>{item.body.slice(0, 120)}</td><td>{new Date(item.createdAt).toLocaleString()}</td></tr>
+                  <tr key={`m-${item.id}`}>
+                    <td>support-msg</td>
+                    <td>{item.channel}</td>
+                    <td>{item.direction}</td>
+                    <td>
+                      {item.metadata?.reportType ? `${item.metadata.reportType}: ` : ""}
+                      {item.body.slice(0, 120)}
+                      {item.metadata?.tripId ? ` | trip ${item.metadata.tripId.slice(0, 8)}` : ""}
+                      {item.metadata?.paymentTransactionId ? ` | txn ${item.metadata.paymentTransactionId.slice(0, 8)}` : ""}
+                    </td>
+                    <td>{new Date(item.createdAt).toLocaleString()}</td>
+                  </tr>
                 ))}
               </tbody>
             </table>

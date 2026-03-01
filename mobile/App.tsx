@@ -1,25 +1,36 @@
-import React, { useMemo, useState } from "react";
-import { SafeAreaView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import React, { useEffect, useMemo, useState } from "react";
+import { SafeAreaView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { useFonts } from "expo-font";
+import { Poppins_400Regular, Poppins_500Medium, Poppins_600SemiBold, Poppins_700Bold } from "@expo-google-fonts/poppins";
 import { AuthProvider, useAuth } from "./src/state/auth-context";
 import { LoginScreen } from "./src/screens/login-screen";
 import { RiderHomeScreen } from "./src/screens/rider-home-screen";
 import { PassengerHomeScreen } from "./src/screens/passenger-home-screen";
 import { WelcomeScreen } from "./src/screens/welcome-screen";
+import { SplashScreen } from "./src/screens/splash-screen";
 import { HelpCenterScreen } from "./src/screens/help-center-screen";
 import { ReceiptsScreen } from "./src/screens/receipts-screen";
 import { ProfileSettingsScreen } from "./src/screens/profile-settings-screen";
 import { AppRole } from "./src/types/auth";
+import { flowColors } from "./src/components/core-flow-ui";
 
 type AppTab = "home" | "help" | "receipts" | "profile";
 
 function AppContent() {
   const { session, logout } = useAuth();
   const [started, setStarted] = useState(false);
+  const [showSplash, setShowSplash] = useState(true);
   const [selectedRole, setSelectedRole] = useState<AppRole>("passenger");
   const [activeTab, setActiveTab] = useState<AppTab>("home");
   const [profileNotice, setProfileNotice] = useState("");
 
+  useEffect(() => {
+    const timer = setTimeout(() => setShowSplash(false), 1200);
+    return () => clearTimeout(timer);
+  }, []);
+
   if (!session) {
+    if (showSplash) return <SplashScreen />;
     if (!started) {
       return (
         <WelcomeScreen
@@ -41,7 +52,7 @@ function AppContent() {
         return (
           <RiderHomeScreen
             onRoleAuthError={() => {
-              setProfileNotice("Your session cannot access this rider action. Switch role or log in again.");
+              setProfileNotice("Your session cannot access this driver action. Log in with a driver account.");
               setActiveTab("profile");
             }}
           />
@@ -51,7 +62,7 @@ function AppContent() {
         return (
           <PassengerHomeScreen
             onRoleAuthError={() => {
-              setProfileNotice("Your session cannot access this passenger action. Switch role or log in again.");
+              setProfileNotice("Your session cannot access this rider action. Log in with a rider account.");
               setActiveTab("profile");
             }}
           />
@@ -63,9 +74,10 @@ function AppContent() {
       return (
         <HelpCenterScreen
           accessToken={session.accessToken}
+          role={role}
           onBack={() => setActiveTab("home")}
           onAuthError={() => {
-            setProfileNotice("Your session cannot access this support action. Switch role or log in again.");
+            setProfileNotice("Your session cannot access this support action. Log in with the correct account.");
             setActiveTab("profile");
           }}
         />
@@ -80,13 +92,6 @@ function AppContent() {
         role={role}
         onLogout={logout}
         notice={profileNotice}
-        onSwitchRole={async (nextRole) => {
-          setSelectedRole(nextRole);
-          setActiveTab("home");
-          setStarted(true);
-          setProfileNotice("");
-          await logout();
-        }}
       />
     );
   }, [activeTab, logout, profileNotice, role, session.accessToken]);
@@ -113,6 +118,29 @@ function TabButton({ label, active, onPress }: { label: string; active: boolean;
 }
 
 export default function App() {
+  const [fontsLoaded] = useFonts({
+    Poppins_400Regular,
+    Poppins_500Medium,
+    Poppins_600SemiBold,
+    Poppins_700Bold
+  });
+
+  useEffect(() => {
+    if (!fontsLoaded) return;
+    Text.defaultProps = Text.defaultProps || {};
+    Text.defaultProps.style = [{ fontFamily: "Poppins_400Regular" }, Text.defaultProps.style];
+    TextInput.defaultProps = TextInput.defaultProps || {};
+    TextInput.defaultProps.style = [{ fontFamily: "Poppins_400Regular" }, TextInput.defaultProps.style];
+  }, [fontsLoaded]);
+
+  if (!fontsLoaded) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.loadingWrap} />
+      </SafeAreaView>
+    );
+  }
+
   return (
     <AuthProvider>
       <SafeAreaView style={styles.safeArea}>
@@ -126,7 +154,7 @@ export default function App() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: "#f4f7fb"
+    backgroundColor: flowColors.page
   },
   appContainer: {
     flex: 1
@@ -134,10 +162,13 @@ const styles = StyleSheet.create({
   content: {
     flex: 1
   },
+  loadingWrap: {
+    flex: 1
+  },
   tabBar: {
     flexDirection: "row",
     borderTopWidth: 1,
-    borderTopColor: "#d8e1ee",
+    borderTopColor: flowColors.border,
     backgroundColor: "#fff",
     paddingVertical: 10,
     paddingHorizontal: 8,
@@ -147,16 +178,16 @@ const styles = StyleSheet.create({
     flex: 1,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#d8e1ee",
+    borderColor: flowColors.border,
     paddingVertical: 10,
     alignItems: "center"
   },
   tabButtonActive: {
-    backgroundColor: "#0e7490",
-    borderColor: "#0e7490"
+    backgroundColor: flowColors.primary,
+    borderColor: flowColors.primary
   },
   tabText: {
-    color: "#0f1f33",
+    color: flowColors.ink,
     fontWeight: "600"
   },
   tabTextActive: {
