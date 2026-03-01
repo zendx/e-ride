@@ -1,0 +1,74 @@
+import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { login as loginApi } from "../lib/api";
+import { clearSession, loadSession, saveSession } from "../lib/storage";
+import { AuthSession } from "../types/auth";
+
+type AuthContextValue = {
+  loading: boolean;
+  session: AuthSession | null;
+  login: (email: string, password: string) => Promise<void>;
+  logout: () => Promise<void>;
+};
+
+const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [loading, setLoading] = useState(true);
+  const [session, setSession] = useState<AuthSession | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      const stored = await loadSession();
+      if (mounted) {
+        setSession(stored);
+        setLoading(false);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  async function login(email: string, password: string) {
+    const payload = await loginApi(email, password);
+    if (payload.user.role !== "passenger") {
+      throw new Error("Only passenger accounts can use this mobile app.");
+    }
+
+    const nextSession: AuthSession = {
+      accessToken: payload.accessToken,
+      refreshToken: payload.refreshToken,
+      user: {
+        id: payload.user.id,
+        email: payload.user.email,
+        role: payload.user.role,
+        tenantId: payload.user.tenantId,
+        tenantSlug: payload.user.tenantSlug
+      }
+    };
+
+    await saveSession(nextSession);
+    setSession(nextSession);
+  }
+
+  async function logout() {
+    await clearSession();
+    setSession(null);
+  }
+
+  const value = useMemo<AuthContextValue>(() => ({
+    loading,
+    session,
+    login,
+    logout
+  }), [loading, session]);
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}
+
+export function useAuth() {
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error("useAuth must be used inside AuthProvider");
+  return ctx;
+}
