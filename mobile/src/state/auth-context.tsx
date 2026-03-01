@@ -32,8 +32,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   async function login(email: string, password: string) {
     const payload = await loginApi(email, password);
-    if (payload.user.role !== "rider") {
-      throw new Error("Only rider accounts can use this mobile app.");
+    if (payload.user.role !== "rider" && payload.user.role !== "passenger") {
+      throw new Error("Only rider or passenger accounts can use this mobile app.");
     }
 
     const nextSession: AuthSession = {

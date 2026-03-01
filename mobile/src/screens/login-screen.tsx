@@ -58,9 +58,9 @@ export function LoginScreen() {
   return (
     <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.container}>
       <View style={styles.card}>
-        <Text style={styles.title}>CarryGo Rider</Text>
+        <Text style={styles.title}>CarryGo Mobile</Text>
         <Text style={styles.subtitle}>
-          {mode === "login" ? "Rider login" : "Rider registration"}
+          {mode === "login" ? "Rider and passenger login" : "Rider registration"}
         </Text>
 
         <View style={styles.switchRow}>

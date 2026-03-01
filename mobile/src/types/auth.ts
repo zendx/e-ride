@@ -1,4 +1,4 @@
-export type AppRole = "passenger";
+export type AppRole = "rider" | "passenger";
 
 export type LoginPayload = {
   accessToken: string;

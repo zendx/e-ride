@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "CarryGo Rider",
-    "slug": "carrygo-rider-mobile",
+    "name": "CarryGo Mobile",
+    "slug": "carrygo-mobile",
     "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",

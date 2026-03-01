@@ -68,18 +68,19 @@ npm run dev
 
 See [docs/api-contracts.md](docs/api-contracts.md).
 
-## Mobile apps
+## Mobile app (Rider + Passenger)
 
-Two Expo apps are available:
-- `rider-mobile/`: rider login + rider registration + rider trip operations
-- `passenger-mobile/`: passenger login + passenger trip request flow
+A new Expo-based mobile app scaffold is available in `mobile/` with:
+- login via `/api/auth/login`
+- rider flow: update availability and trip status
+- passenger flow: request trip
 
-### Run rider app
+### Run mobile app
 
-1. Install rider app dependencies
+1. Install mobile dependencies
 
 ```bash
-npm run rider-mobile:install
+npm run mobile:install
 ```
 
 2. Set API base URL for Expo
@@ -99,44 +100,12 @@ $env:EXPO_PUBLIC_GOOGLE_MAPS_API_KEY="YOUR_GOOGLE_MAPS_KEY"
 3. Start Expo
 
 ```bash
-npm run rider-mobile:start
+npm run mobile:start
 ```
 
 You can also run:
-- `npm run rider-mobile:android`
-- `npm run rider-mobile:ios`
-
-### Run passenger app
-
-1. Install passenger app dependencies
-
-```bash
-npm run passenger-mobile:install
-```
-
-2. Set API base URL for Expo
-
-```bash
-# PowerShell
-$env:EXPO_PUBLIC_API_BASE_URL="http://YOUR_LOCAL_IP:3000"
-```
-
-Set Google Maps key for map + address search:
-
-```bash
-# PowerShell
-$env:EXPO_PUBLIC_GOOGLE_MAPS_API_KEY="YOUR_GOOGLE_MAPS_KEY"
-```
-
-3. Start Expo
-
-```bash
-npm run passenger-mobile:start
-```
-
-You can also run:
-- `npm run passenger-mobile:android`
-- `npm run passenger-mobile:ios`
+- `npm run mobile:android`
+- `npm run mobile:ios`
 
 ## Roadmap
 
