@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { PasswordField } from "@/components/password-field";
@@ -115,45 +115,50 @@ export function EnrollTenantForm() {
       <p className="muted">Use a super-admin access token to create tenant + tenant admin.</p>
 
       <form onSubmit={onSubmit} className="form-grid">
-        <label>
+        <label className="form-label">
           Access Token
           <PasswordField
+            className="form-control"
             value={accessToken}
             onChange={(event) => setAccessToken(event.target.value)}
             placeholder="JWT access token"
           />
         </label>
 
-        <label>
+        <label className="form-label">
           Tenant Name
           <input
+            className="form-control"
             value={payload.name}
             onChange={(event) => setPayload({ ...payload, name: event.target.value })}
             placeholder="Gamma Rides"
           />
         </label>
 
-        <label>
+        <label className="form-label">
           Tenant Slug
           <input
+            className="form-control"
             value={payload.slug}
             onChange={(event) => setPayload({ ...payload, slug: event.target.value })}
             placeholder="gamma-rides"
           />
         </label>
 
-        <label>
+        <label className="form-label">
           Admin Full Name
           <input
+            className="form-control"
             value={payload.adminFullName}
             onChange={(event) => setPayload({ ...payload, adminFullName: event.target.value })}
             placeholder="Gamma Admin"
           />
         </label>
 
-        <label>
+        <label className="form-label">
           Admin Email
           <input
+            className="form-control"
             type="email"
             value={payload.adminEmail}
             onChange={(event) => setPayload({ ...payload, adminEmail: event.target.value })}
@@ -161,27 +166,30 @@ export function EnrollTenantForm() {
           />
         </label>
 
-        <label>
+        <label className="form-label">
           Admin Password
           <PasswordField
+            className="form-control"
             value={payload.adminPassword}
             onChange={(event) => setPayload({ ...payload, adminPassword: event.target.value })}
             placeholder="StrongPass123"
           />
         </label>
 
-        <label>
+        <label className="form-label">
           App Name
           <input
+            className="form-control"
             value={payload.appName}
             onChange={(event) => setPayload({ ...payload, appName: event.target.value })}
             placeholder="GammaGo"
           />
         </label>
 
-        <label>
+        <label className="form-label">
           Support Email
           <input
+            className="form-control"
             type="email"
             value={payload.supportEmail}
             onChange={(event) => setPayload({ ...payload, supportEmail: event.target.value })}
@@ -189,45 +197,50 @@ export function EnrollTenantForm() {
           />
         </label>
 
-        <label>
+        <label className="form-label">
           Support Phone
           <input
+            className="form-control"
             value={payload.supportPhone}
             onChange={(event) => setPayload({ ...payload, supportPhone: event.target.value })}
             placeholder="+1000000"
           />
         </label>
 
-        <label>
+        <label className="form-label">
           Primary Color
           <input
+            className="form-control"
             value={payload.primaryColor}
             onChange={(event) => setPayload({ ...payload, primaryColor: event.target.value })}
             placeholder="#0EA5E9"
           />
         </label>
 
-        <label>
+        <label className="form-label">
           Secondary Color
           <input
+            className="form-control"
             value={payload.secondaryColor}
             onChange={(event) => setPayload({ ...payload, secondaryColor: event.target.value })}
             placeholder="#0F172A"
           />
         </label>
 
-        <label>
+        <label className="form-label">
           Custom Domain
           <input
+            className="form-control"
             value={payload.customDomain}
             onChange={(event) => setPayload({ ...payload, customDomain: event.target.value })}
             placeholder="rides.example.com"
           />
         </label>
 
-        <label>
+        <label className="form-label">
           Platform Commission (bps)
           <input
+            className="form-control"
             type="number"
             min={0}
             max={5000}
@@ -243,7 +256,7 @@ export function EnrollTenantForm() {
           />
         </label>
 
-        <button type="submit" disabled={submitDisabled}>
+        <button type="submit" className="btn btn-outline-theme fw-500" disabled={submitDisabled}>
           {isSubmitting ? "Enrolling..." : "Enroll Tenant"}
         </button>
       </form>

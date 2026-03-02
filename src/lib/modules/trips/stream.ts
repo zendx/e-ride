@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { redis } from "@/lib/redis/client";
+import { createRedisSubscriber } from "@/lib/redis/client";
 import { getLiveTripSnapshot } from "@/lib/modules/trips/live";
 import { getTripChannel } from "@/lib/modules/trips/realtime";
 import { logger } from "@/lib/logger";
@@ -20,7 +20,7 @@ export function createTripEventStreamResponse({ request, tenantId, tripId }: Tri
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
-      const subscriber = redis.duplicate();
+      const subscriber = createRedisSubscriber();
       let heartbeat: ReturnType<typeof setInterval> | undefined;
 
       const cleanup = async () => {

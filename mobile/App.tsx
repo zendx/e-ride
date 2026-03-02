@@ -138,10 +138,16 @@ export default function App() {
 
   useEffect(() => {
     if (!fontsLoaded) return;
-    Text.defaultProps = Text.defaultProps || {};
-    Text.defaultProps.style = [{ fontFamily: "Poppins_400Regular" }, Text.defaultProps.style];
-    TextInput.defaultProps = TextInput.defaultProps || {};
-    TextInput.defaultProps.style = [{ fontFamily: "Poppins_400Regular" }, TextInput.defaultProps.style];
+    const textWithDefaults = Text as typeof Text & { defaultProps?: { style?: unknown } };
+    textWithDefaults.defaultProps = textWithDefaults.defaultProps || {};
+    textWithDefaults.defaultProps.style = [{ fontFamily: "Poppins_400Regular" }, textWithDefaults.defaultProps.style];
+
+    const textInputWithDefaults = TextInput as typeof TextInput & { defaultProps?: { style?: unknown } };
+    textInputWithDefaults.defaultProps = textInputWithDefaults.defaultProps || {};
+    textInputWithDefaults.defaultProps.style = [
+      { fontFamily: "Poppins_400Regular" },
+      textInputWithDefaults.defaultProps.style
+    ];
   }, [fontsLoaded]);
 
   if (!fontsLoaded) {

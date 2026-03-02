@@ -1,22 +1,46 @@
-﻿import Link from "next/link";
+﻿"use client";
+
+import Link from "next/link";
+import { motion } from "framer-motion";
 
 export default function HomePage() {
   return (
-    <main className="container">
-      <h1>CarryGo Control Center</h1>
-      <p className="page-subtitle">Manage multi-tenant ride operations from one platform with secured admin and tenant workspaces.</p>
-      <div className="grid">
-        <Link className="card" href="/super-admin">
+    <motion.main
+      className="landing"
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35, ease: "easeOut" }}
+    >
+      <section className="hero glass-card">
+        <p className="hero-kicker">E-Ride Platform</p>
+        <h1>White-label ride operations with enterprise control</h1>
+        <p className="page-subtitle">
+          Inspired by the design language from your reference repo, now applied directly in this project for super admin and tenant
+          operations.
+        </p>
+
+        <div className="quick-links">
+          <Link className="hero-link hero-link-primary" href="/super-admin/login">
+            Super Admin Login
+          </Link>
+          <Link className="hero-link hero-link-secondary" href="/tenant-admin/login">
+            Tenant Admin Login
+          </Link>
+        </div>
+      </section>
+
+      <section className="grid hero-grid">
+        <Link className="card hero-card glass-card" href="/super-admin">
           <strong>Platform</strong>
-          <p>Super Admin</p>
-          <span className="muted">Tenants, administrators, branding, and system-level controls.</span>
+          <p>Super Admin Console</p>
+          <span className="muted">Cross-tenant insights, enrollment, profile management, and system controls.</span>
         </Link>
-        <Link className="card" href="/tenant-admin/login">
+        <Link className="card hero-card glass-card" href="/tenant-admin">
           <strong>Tenant</strong>
-          <p>Tenant Admin</p>
-          <span className="muted">Real-time operations console for riders, trips, payments, and support.</span>
+          <p>Tenant Operations Console</p>
+          <span className="muted">Riders, trip activity, payouts, and support operations in one workspace.</span>
         </Link>
-      </div>
-    </main>
+      </section>
+    </motion.main>
   );
 }

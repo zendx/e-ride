@@ -3,7 +3,7 @@ import { NextRequest } from "next/server";
 import { verifyAccessToken } from "@/lib/auth/jwt";
 import { AppError } from "@/lib/errors/app-error";
 import { fail } from "@/lib/http";
-import { redis } from "@/lib/redis/client";
+import { createRedisSubscriber } from "@/lib/redis/client";
 import { getSuperAdminOpsChannel } from "@/lib/modules/trips/realtime";
 import { requireRole } from "@/lib/auth/rbac";
 
@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
 
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
-        const subscriber = redis.duplicate();
+        const subscriber = createRedisSubscriber();
         let heartbeat: ReturnType<typeof setInterval> | undefined;
 
         const cleanup = async () => {

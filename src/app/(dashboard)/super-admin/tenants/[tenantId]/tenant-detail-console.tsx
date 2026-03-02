@@ -84,6 +84,7 @@ export function TenantDetailConsole({ tenantId }: { tenantId: string }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [streamState, setStreamState] = useState<"connecting" | "live" | "fallback">("connecting");
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(false);
   const [insights, setInsights] = useState<TenantInsights | null>(null);
   const [tenantResult, setTenantResult] = useState<{ ok: boolean; message: string } | null>(null);
   const [credentialsResult, setCredentialsResult] = useState<{ ok: boolean; message: string } | null>(null);
@@ -188,13 +189,13 @@ export function TenantDetailConsole({ tenantId }: { tenantId: string }) {
   }, [loadInsights, router]);
 
   useEffect(() => {
-    if (!accessToken.trim()) return;
+    if (!accessToken.trim() || !autoRefreshEnabled) return;
     setStreamState("connecting");
-  }, [accessToken, tenantId]);
+  }, [accessToken, autoRefreshEnabled, tenantId]);
 
   useEffect(() => {
     const token = normalizeToken(accessToken);
-    if (!token || streamState === "fallback") return;
+    if (!token || !autoRefreshEnabled || streamState === "fallback") return;
 
     const eventSource = new EventSource(`/api/super-admin/tenants/${tenantId}/stream?accessToken=${encodeURIComponent(token)}`);
     let closed = false;
@@ -221,11 +222,11 @@ export function TenantDetailConsole({ tenantId }: { tenantId: string }) {
       eventSource.removeEventListener("tenant_event", handleUpdate);
       eventSource.close();
     };
-  }, [accessToken, loadInsights, streamState, tenantId]);
+  }, [accessToken, autoRefreshEnabled, loadInsights, streamState, tenantId]);
 
   useEffect(() => {
     const token = normalizeToken(accessToken);
-    if (!token || streamState !== "fallback") return;
+    if (!token || !autoRefreshEnabled || streamState !== "fallback") return;
 
     void loadInsights(token, { silent: true });
     const interval = setInterval(() => {
@@ -233,7 +234,7 @@ export function TenantDetailConsole({ tenantId }: { tenantId: string }) {
     }, 15000);
 
     return () => clearInterval(interval);
-  }, [accessToken, loadInsights, streamState]);
+  }, [accessToken, autoRefreshEnabled, loadInsights, streamState]);
 
   async function submitTenantUpdate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -328,7 +329,9 @@ export function TenantDetailConsole({ tenantId }: { tenantId: string }) {
       <h1>Tenant Detail</h1>
       <p className="page-subtitle">View and edit tenant profile, riders, passengers, trips, and transactions.</p>
       <p className="muted">
-        {streamState === "live"
+        {!autoRefreshEnabled
+          ? "Auto-refresh is off. Use Refresh to load the latest data."
+          : streamState === "live"
           ? "Live updates via SSE stream."
           : streamState === "connecting"
             ? "Connecting to live stream..."
@@ -336,10 +339,13 @@ export function TenantDetailConsole({ tenantId }: { tenantId: string }) {
       </p>
 
       <div className="toolbar">
-        <button type="button" onClick={() => void loadInsights(accessToken)} disabled={loading}>
+        <button type="button" className="btn btn-outline-default btn-sm" onClick={() => void loadInsights(accessToken)} disabled={loading}>
           {loading ? "Refreshing..." : "Refresh"}
         </button>
-        <Link href="/super-admin">Back to Super Admin</Link>
+        <button type="button" className="btn btn-outline-default btn-sm" onClick={() => setAutoRefreshEnabled((current) => !current)}>
+          {autoRefreshEnabled ? "Auto-refresh: On" : "Auto-refresh: Off"}
+        </button>
+        <Link href="/super-admin" className="btn btn-outline-default btn-sm">Back to Super Admin</Link>
       </div>
 
       {error ? <p className="status-error">{error}</p> : null}
@@ -348,9 +354,10 @@ export function TenantDetailConsole({ tenantId }: { tenantId: string }) {
           <section className="card section">
             <h2>Tenant Admin Login Credentials</h2>
             <form className="form-grid" onSubmit={submitCredentialsUpdate}>
-              <label>
+              <label className="form-label">
                 Tenant Admin Account
                 <select
+                  className="form-select"
                   value={credentialsForm.adminUserId}
                   onChange={(event) => {
                     const admin = insights.tenantAdmins.find((item) => item.id === event.target.value);
@@ -369,25 +376,27 @@ export function TenantDetailConsole({ tenantId }: { tenantId: string }) {
                   ))}
                 </select>
               </label>
-              <label>
+              <label className="form-label">
                 Login Email
                 <input
+                  className="form-control"
                   type="email"
                   value={credentialsForm.email}
                   onChange={(event) => setCredentialsForm({ ...credentialsForm, email: event.target.value })}
                   disabled={!credentialsForm.adminUserId}
                 />
               </label>
-              <label>
+              <label className="form-label">
                 New Password
                 <PasswordField
+                  className="form-control"
                   value={credentialsForm.newPassword}
                   onChange={(event) => setCredentialsForm({ ...credentialsForm, newPassword: event.target.value })}
                   placeholder="Leave blank to keep current password"
                   disabled={!credentialsForm.adminUserId}
                 />
               </label>
-              <button type="submit" disabled={!credentialsForm.adminUserId}>Save Credentials</button>
+              <button type="submit" className="btn btn-outline-theme fw-500" disabled={!credentialsForm.adminUserId}>Save Credentials</button>
             </form>
             {!insights.tenantAdmins.length ? <p className="muted">No tenant admin account found for this tenant.</p> : null}
             {credentialsResult ? <p className={credentialsResult.ok ? "status-ok" : "status-error"}>{credentialsResult.message}</p> : null}
@@ -396,20 +405,20 @@ export function TenantDetailConsole({ tenantId }: { tenantId: string }) {
           <section className="card section">
             <h2>Edit Tenant</h2>
             <form className="form-grid" onSubmit={submitTenantUpdate}>
-              <label>Name<input value={tenantForm.name} onChange={(e) => setTenantForm({ ...tenantForm, name: e.target.value })} /></label>
-              <label>Slug<input value={tenantForm.slug} onChange={(e) => setTenantForm({ ...tenantForm, slug: e.target.value })} /></label>
-              <label>Status<input value={tenantForm.status} onChange={(e) => setTenantForm({ ...tenantForm, status: e.target.value })} /></label>
-              <label>App Name<input value={tenantForm.appName} onChange={(e) => setTenantForm({ ...tenantForm, appName: e.target.value })} /></label>
-              <label>Support Email<input type="email" value={tenantForm.supportEmail} onChange={(e) => setTenantForm({ ...tenantForm, supportEmail: e.target.value })} /></label>
-              <label>Support Phone<input value={tenantForm.supportPhone} onChange={(e) => setTenantForm({ ...tenantForm, supportPhone: e.target.value })} /></label>
-              <label>Custom Domain<input value={tenantForm.customDomain} onChange={(e) => setTenantForm({ ...tenantForm, customDomain: e.target.value })} /></label>
-              <label>Primary Color<input value={tenantForm.primaryColor} onChange={(e) => setTenantForm({ ...tenantForm, primaryColor: e.target.value })} /></label>
-              <label>Secondary Color<input value={tenantForm.secondaryColor} onChange={(e) => setTenantForm({ ...tenantForm, secondaryColor: e.target.value })} /></label>
-              <label>
+              <label className="form-label">Name<input className="form-control" value={tenantForm.name} onChange={(e) => setTenantForm({ ...tenantForm, name: e.target.value })} /></label>
+              <label className="form-label">Slug<input className="form-control" value={tenantForm.slug} onChange={(e) => setTenantForm({ ...tenantForm, slug: e.target.value })} /></label>
+              <label className="form-label">Status<input className="form-control" value={tenantForm.status} onChange={(e) => setTenantForm({ ...tenantForm, status: e.target.value })} /></label>
+              <label className="form-label">App Name<input className="form-control" value={tenantForm.appName} onChange={(e) => setTenantForm({ ...tenantForm, appName: e.target.value })} /></label>
+              <label className="form-label">Support Email<input className="form-control" type="email" value={tenantForm.supportEmail} onChange={(e) => setTenantForm({ ...tenantForm, supportEmail: e.target.value })} /></label>
+              <label className="form-label">Support Phone<input className="form-control" value={tenantForm.supportPhone} onChange={(e) => setTenantForm({ ...tenantForm, supportPhone: e.target.value })} /></label>
+              <label className="form-label">Custom Domain<input className="form-control" value={tenantForm.customDomain} onChange={(e) => setTenantForm({ ...tenantForm, customDomain: e.target.value })} /></label>
+              <label className="form-label">Primary Color<input className="form-control" value={tenantForm.primaryColor} onChange={(e) => setTenantForm({ ...tenantForm, primaryColor: e.target.value })} /></label>
+              <label className="form-label">Secondary Color<input className="form-control" value={tenantForm.secondaryColor} onChange={(e) => setTenantForm({ ...tenantForm, secondaryColor: e.target.value })} /></label>
+              <label className="form-label">
                 Platform Commission (bps)
-                <input type="number" min={0} max={5000} value={tenantForm.platformCommissionBps} onChange={(e) => setTenantForm({ ...tenantForm, platformCommissionBps: Number(e.target.value) })} />
+                <input className="form-control" type="number" min={0} max={5000} value={tenantForm.platformCommissionBps} onChange={(e) => setTenantForm({ ...tenantForm, platformCommissionBps: Number(e.target.value) })} />
               </label>
-              <button type="submit">Save Tenant</button>
+              <button type="submit" className="btn btn-outline-theme fw-500">Save Tenant</button>
             </form>
             {tenantResult ? <p className={tenantResult.ok ? "status-ok" : "status-error"}>{tenantResult.message}</p> : null}
           </section>

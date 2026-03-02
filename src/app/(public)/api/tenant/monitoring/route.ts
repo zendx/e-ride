@@ -59,6 +59,7 @@ export async function GET(request: NextRequest) {
       summary,
       activeTrips,
       riders,
+      riderOperations,
       passengers,
       tripHistory,
       payments,
@@ -85,8 +86,8 @@ export async function GET(request: NextRequest) {
         () =>
           Promise.all([
             prisma.riderProfile.count({ where: { tenantId: auth.tenantId, availability: "online" } }),
-            prisma.riderProfile.count({ where: { tenantId: auth.tenantId } }),
-            prisma.passengerProfile.count({ where: { tenantId: auth.tenantId } }),
+            prisma.user.count({ where: { tenantId: auth.tenantId, role: Role.rider } }),
+            prisma.user.count({ where: { tenantId: auth.tenantId, role: Role.passenger } }),
             prisma.trip.count({ where: { tenantId: auth.tenantId, status: { in: ACTIVE_STATUSES } } }),
             prisma.trip.count({ where: { tenantId: auth.tenantId, status: "completed", completedAt: { gte: todayStart } } }),
             prisma.trip.count({ where: { tenantId: auth.tenantId, status: "cancelled", cancelledAt: { gte: todayStart } } }),
@@ -182,6 +183,151 @@ export async function GET(request: NextRequest) {
           }
         }
       }), []),
+
+      safe(async () => {
+        const riderUsers = await prisma.user.findMany({
+          where: { tenantId: auth.tenantId, role: Role.rider },
+          orderBy: { createdAt: "desc" },
+          take: peopleLimit,
+          select: {
+            id: true,
+            fullName: true,
+            email: true,
+            phoneNumber: true,
+            status: true,
+            createdAt: true,
+            lastLoginAt: true,
+            riderProfile: {
+              select: {
+                id: true,
+                availability: true,
+                rating: true,
+                totalTrips: true,
+                vehicleType: true,
+                vehiclePlate: true,
+                vehicleMake: true,
+                vehicleModel: true,
+                vehicleColor: true,
+                earningsMinor: true,
+                createdAt: true
+              }
+            }
+          }
+        });
+
+        return Promise.all(
+          riderUsers.map(async (riderUser) => {
+            const profileSafe = riderUser.riderProfile
+              ? {
+                ...riderUser.riderProfile,
+                earningsMinor:
+                  typeof riderUser.riderProfile.earningsMinor === "bigint"
+                    ? riderUser.riderProfile.earningsMinor.toString()
+                    : riderUser.riderProfile.earningsMinor
+              }
+              : null;
+            const riderProfileId = profileSafe?.id;
+            const userSafe = {
+              id: riderUser.id,
+              fullName: riderUser.fullName,
+              email: riderUser.email,
+              phoneNumber: riderUser.phoneNumber,
+              status: riderUser.status,
+              createdAt: riderUser.createdAt,
+              lastLoginAt: riderUser.lastLoginAt
+            };
+
+            if (!riderProfileId) {
+              return {
+                user: userSafe,
+                profile: null,
+                lastTrip: null,
+                recentTrips: [],
+                lastPayment: null,
+                recentPayments: []
+              };
+            }
+
+            const [lastTrip, recentTrips, lastPayment, recentPayments] = await Promise.all([
+              prisma.trip.findFirst({
+                where: { tenantId: auth.tenantId, riderId: riderProfileId },
+                orderBy: { requestedAt: "desc" },
+                select: {
+                  id: true,
+                  status: true,
+                  pickupAddress: true,
+                  dropoffAddress: true,
+                  requestedAt: true,
+                  completedAt: true,
+                  cancelledAt: true,
+                  fareTotalMinor: true
+                }
+              }),
+              prisma.trip.findMany({
+                where: { tenantId: auth.tenantId, riderId: riderProfileId },
+                orderBy: { requestedAt: "desc" },
+                take: 5,
+                select: {
+                  id: true,
+                  status: true,
+                  pickupAddress: true,
+                  dropoffAddress: true,
+                  requestedAt: true,
+                  completedAt: true,
+                  cancelledAt: true,
+                  fareTotalMinor: true
+                }
+              }),
+              prisma.paymentTransaction.findFirst({
+                where: {
+                  tenantId: auth.tenantId,
+                  trip: { riderId: riderProfileId }
+                },
+                orderBy: { createdAt: "desc" },
+                select: {
+                  id: true,
+                  tripId: true,
+                  method: true,
+                  status: true,
+                  amountMinor: true,
+                  feeMinor: true,
+                  discountMinor: true,
+                  commissionMinor: true,
+                  createdAt: true
+                }
+              }),
+              prisma.paymentTransaction.findMany({
+                where: {
+                  tenantId: auth.tenantId,
+                  trip: { riderId: riderProfileId }
+                },
+                orderBy: { createdAt: "desc" },
+                take: 5,
+                select: {
+                  id: true,
+                  tripId: true,
+                  method: true,
+                  status: true,
+                  amountMinor: true,
+                  feeMinor: true,
+                  discountMinor: true,
+                  commissionMinor: true,
+                  createdAt: true
+                }
+              })
+            ]);
+
+            return {
+              user: userSafe,
+              profile: profileSafe,
+              lastTrip,
+              recentTrips,
+              lastPayment,
+              recentPayments
+            };
+          })
+        );
+      }, []),
 
       safe(() => prisma.passengerProfile.findMany({
         where: { tenantId: auth.tenantId },
@@ -484,6 +630,7 @@ export async function GET(request: NextRequest) {
       summary,
       activeTrips,
       riders,
+      riderOperations,
       passengers: passengersSafe,
       tripHistory,
       payments,

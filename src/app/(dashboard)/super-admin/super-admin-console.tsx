@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -69,6 +69,7 @@ export function SuperAdminConsole() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [streamState, setStreamState] = useState<"connecting" | "live" | "fallback">("connecting");
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(false);
   const [overview, setOverview] = useState<SuperAdminOverview | null>(null);
   const [tenants, setTenants] = useState<TenantRow[]>([]);
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -207,13 +208,13 @@ export function SuperAdminConsole() {
   }, [loadDashboard, router]);
 
   useEffect(() => {
-    if (!accessToken.trim()) return;
+    if (!accessToken.trim() || !autoRefreshEnabled) return;
     setStreamState("connecting");
-  }, [accessToken]);
+  }, [accessToken, autoRefreshEnabled]);
 
   useEffect(() => {
     const token = normalizeToken(accessToken);
-    if (!token || streamState === "fallback") return;
+    if (!token || !autoRefreshEnabled || streamState === "fallback") return;
 
     const eventSource = new EventSource(`/api/super-admin/dashboard/stream?accessToken=${encodeURIComponent(token)}`);
     let closed = false;
@@ -240,11 +241,11 @@ export function SuperAdminConsole() {
       eventSource.removeEventListener("superadmin_event", handleUpdate);
       eventSource.close();
     };
-  }, [accessToken, loadDashboard, streamState]);
+  }, [accessToken, autoRefreshEnabled, loadDashboard, streamState]);
 
   useEffect(() => {
     const token = normalizeToken(accessToken);
-    if (!token || streamState !== "fallback") return;
+    if (!token || !autoRefreshEnabled || streamState !== "fallback") return;
 
     void loadDashboard(token, { silent: true });
     const interval = setInterval(() => {
@@ -252,7 +253,7 @@ export function SuperAdminConsole() {
     }, 15000);
 
     return () => clearInterval(interval);
-  }, [accessToken, loadDashboard, streamState]);
+  }, [accessToken, autoRefreshEnabled, loadDashboard, streamState]);
 
   async function submitProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -332,32 +333,35 @@ export function SuperAdminConsole() {
 
   if (!sessionReady) {
     return (
-      <main className="container">
-        <p className="muted">Redirecting to login...</p>
-      </main>
+      <div className="alert alert-warning mb-0">Redirecting to login...</div>
     );
   }
 
   return (
-    <main className="container">
-      <h1>CarryGo Super Admin</h1>
-      <p className="page-subtitle">Platform controls for tenants, administrators, and operational oversight.</p>
+    <section>
+      <p className="text-body-secondary mb-3">Platform controls for tenants, administrators, and operational oversight.</p>
       <p className="muted">
-        {streamState === "live"
+        {!autoRefreshEnabled
+          ? "Auto-refresh is off. Use Refresh to load the latest data."
+          : streamState === "live"
           ? "Live updates via SSE stream."
           : streamState === "connecting"
             ? "Connecting to live stream..."
             : "Stream unavailable. Using 15s polling fallback."}
       </p>
       <div className="toolbar">
-        <button type="button" onClick={() => void loadDashboard(accessToken)} disabled={loading}>
+        <button type="button" className="btn btn-outline-default btn-sm" onClick={() => void loadDashboard(accessToken)} disabled={loading}>
           {loading ? "Refreshing..." : "Refresh"}
         </button>
-        <button type="button" onClick={() => router.push("/super-admin/enroll")}>
+        <button type="button" className="btn btn-outline-default btn-sm" onClick={() => setAutoRefreshEnabled((current) => !current)}>
+          {autoRefreshEnabled ? "Auto-refresh: On" : "Auto-refresh: Off"}
+        </button>
+        <button type="button" className="btn btn-outline-default btn-sm" onClick={() => router.push("/super-admin/enroll")}>
           Enroll Tenant
         </button>
         <button
           type="button"
+          className="btn btn-outline-default btn-sm"
           onClick={() => {
             clearClientSession();
             setAccessToken("");
@@ -376,47 +380,156 @@ export function SuperAdminConsole() {
       {error ? <p className="status-error">{error}</p> : null}
 
       {overview ? (
-        <div className="grid">
-          <div className="card"><strong>Tenants</strong><p>{overview.tenantCount}</p></div>
-          <div className="card"><strong>Pending KYC</strong><p>{overview.pendingKycCount}</p></div>
-          <div className="card"><strong>Active Trips</strong><p>{overview.activeTripCount}</p></div>
-          <div className="card"><strong>Open Complaints</strong><p>{overview.openComplaintCount}</p></div>
+        <div className="row">
+          <div className="col-xl-6 mb-3">
+            <div className="card h-100 overflow-hidden">
+              <div
+                className="card-img-overlay d-none d-md-block bg-blue rounded mb-n1 mx-n1"
+                style={{
+                  backgroundImage: "url(/studio/assets/img/bg/wave-bg.png)",
+                  backgroundPosition: "right bottom",
+                  backgroundRepeat: "no-repeat",
+                  backgroundSize: "100%"
+                }}
+              ></div>
+              <div className="card-img-overlay d-none d-md-block bottom-0 top-auto">
+                <div className="row">
+                  <div className="col-md-8 col-xl-6"></div>
+                  <div className="col-md-4 col-xl-6 mb-n2">
+                    <img src="/studio/assets/img/page/dashboard.svg" alt="" className="d-block ms-n3 mb-5" style={{ maxHeight: 280 }} />
+                  </div>
+                </div>
+              </div>
+              <div className="card-body position-relative text-white text-opacity-70">
+                <div className="row">
+                  <div className="col-md-8">
+                    <div className="d-flex">
+                      <div className="me-auto">
+                        <h5 className="text-white text-opacity-80 mb-3">Platform Snapshot</h5>
+                        <h3 className="text-white mt-n1 mb-1">{overview.tenantCount} Tenants</h3>
+                        <p className="mb-1 text-white text-opacity-60 text-truncate">
+                          <i className="fa fa-caret-up"></i> Super admin overview
+                        </p>
+                      </div>
+                    </div>
+                    <hr className="bg-white bg-opacity-75 mt-3 mb-3" />
+                    <div className="row">
+                      <div className="col-6 col-lg-5">
+                        <div className="mt-1">
+                          <i className="fa fa-fw fa-id-card fs-28px text-black text-opacity-50"></i>
+                        </div>
+                        <div className="mt-1">
+                          <div>Pending KYC</div>
+                          <div className="fw-600 text-white">{overview.pendingKycCount}</div>
+                        </div>
+                      </div>
+                      <div className="col-6 col-lg-5">
+                        <div className="mt-1">
+                          <i className="fa fa-fw fa-route fs-28px text-black text-opacity-50"></i>
+                        </div>
+                        <div className="mt-1">
+                          <div>Active Trips</div>
+                          <div className="fw-600 text-white">{overview.activeTripCount}</div>
+                        </div>
+                      </div>
+                    </div>
+                    <hr className="bg-white bg-opacity-75 mt-3 mb-3" />
+                    <div className="mt-3 mb-2">
+                      <button type="button" className="btn btn-yellow btn-rounded btn-sm ps-5 pe-5 pt-2 pb-2 fs-14px fw-600" onClick={() => router.push("/super-admin/enroll")}>
+                        <i className="fa fa-plus me-2 ms-n2"></i> Enroll tenant
+                      </button>
+                    </div>
+                    <p className="fs-12px">Review tenants, open complaints and admin assignments from one panel.</p>
+                  </div>
+                  <div className="col-md-4 d-none d-md-block" style={{ minHeight: 320 }}></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="col-xl-6">
+            <div className="row">
+              <div className="col-sm-6">
+                <div className="card mb-3 overflow-hidden fs-13px border-0 bg-gradient-custom-orange" style={{ minHeight: 199 }}>
+                  <div className="card-img-overlay mb-n4 me-n4 d-flex" style={{ bottom: 0, top: "auto" }}>
+                    <img src="/studio/assets/img/icon/order.svg" alt="" className="ms-auto d-block mb-n3" style={{ maxHeight: 105 }} />
+                  </div>
+                  <div className="card-body position-relative">
+                    <h5 className="text-white text-opacity-80 mb-3 fs-16px">Total Tenants</h5>
+                    <h3 className="text-white mt-n1">{overview.tenantCount}</h3>
+                  </div>
+                </div>
+                <div className="card mb-3 overflow-hidden fs-13px border-0 bg-gradient-custom-teal" style={{ minHeight: 199 }}>
+                  <div className="card-img-overlay mb-n4 me-n4 d-flex" style={{ bottom: 0, top: "auto" }}>
+                    <img src="/studio/assets/img/icon/visitor.svg" alt="" className="ms-auto d-block mb-n3" style={{ maxHeight: 105 }} />
+                  </div>
+                  <div className="card-body position-relative">
+                    <h5 className="text-white text-opacity-80 mb-3 fs-16px">Pending KYC</h5>
+                    <h3 className="text-white mt-n1">{overview.pendingKycCount}</h3>
+                  </div>
+                </div>
+              </div>
+              <div className="col-sm-6">
+                <div className="card mb-3 overflow-hidden fs-13px border-0 bg-gradient-custom-pink" style={{ minHeight: 199 }}>
+                  <div className="card-img-overlay mb-n4 me-n4 d-flex" style={{ bottom: 0, top: "auto" }}>
+                    <img src="/studio/assets/img/icon/email.svg" alt="" className="ms-auto d-block mb-n3" style={{ maxHeight: 105 }} />
+                  </div>
+                  <div className="card-body position-relative">
+                    <h5 className="text-white text-opacity-80 mb-3 fs-16px">Active Trips</h5>
+                    <h3 className="text-white mt-n1">{overview.activeTripCount}</h3>
+                  </div>
+                </div>
+                <div className="card mb-3 overflow-hidden fs-13px border-0 bg-gradient-custom-indigo" style={{ minHeight: 199 }}>
+                  <div className="card-img-overlay mb-n4 me-n4 d-flex" style={{ bottom: 0, top: "auto" }}>
+                    <img src="/studio/assets/img/icon/browser.svg" alt="" className="ms-auto d-block mb-n3" style={{ maxHeight: 105 }} />
+                  </div>
+                  <div className="card-body position-relative">
+                    <h5 className="text-white text-opacity-80 mb-3 fs-16px">Open Complaints</h5>
+                    <h3 className="text-white mt-n1">{overview.openComplaintCount}</h3>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       ) : null}
 
       <section className="card section">
         <h2>My Profile</h2>
         <form className="form-grid" onSubmit={submitProfile}>
-          <label>
+          <label className="form-label">
             Full Name
             <input
+              className="form-control"
               value={profileForm.fullName}
               onChange={(event) => setProfileForm({ ...profileForm, fullName: event.target.value })}
             />
           </label>
-          <label>
+          <label className="form-label">
             Email
             <input
+              className="form-control"
               type="email"
               value={profileForm.email}
               onChange={(event) => setProfileForm({ ...profileForm, email: event.target.value })}
             />
           </label>
-          <label>
+          <label className="form-label">
             Current Password (required to change password)
             <PasswordField
+              className="form-control"
               value={profileForm.currentPassword}
               onChange={(event) => setProfileForm({ ...profileForm, currentPassword: event.target.value })}
             />
           </label>
-          <label>
+          <label className="form-label">
             New Password
             <PasswordField
+              className="form-control"
               value={profileForm.newPassword}
               onChange={(event) => setProfileForm({ ...profileForm, newPassword: event.target.value })}
             />
           </label>
-          <button type="submit">Save Profile</button>
+          <button type="submit" className="btn btn-outline-theme fw-500">Save Profile</button>
         </form>
         {profile ? <p className="muted">Role: {profile.role}</p> : null}
         {profileResult ? <p className={profileResult.ok ? "status-ok" : "status-error"}>{profileResult.message}</p> : null}
@@ -426,31 +539,35 @@ export function SuperAdminConsole() {
         <h2>Assign Administrators</h2>
         <p className="muted">Role levels: super_admin (full control), support (operations/support access).</p>
         <form className="form-grid" onSubmit={submitAdminUser}>
-          <label>
+          <label className="form-label">
             Full Name
             <input
+              className="form-control"
               value={adminForm.fullName}
               onChange={(event) => setAdminForm({ ...adminForm, fullName: event.target.value })}
             />
           </label>
-          <label>
+          <label className="form-label">
             Email
             <input
+              className="form-control"
               type="email"
               value={adminForm.email}
               onChange={(event) => setAdminForm({ ...adminForm, email: event.target.value })}
             />
           </label>
-          <label>
+          <label className="form-label">
             Temporary Password
             <PasswordField
+              className="form-control"
               value={adminForm.password}
               onChange={(event) => setAdminForm({ ...adminForm, password: event.target.value })}
             />
           </label>
-          <label>
+          <label className="form-label">
             Role Level
             <select
+              className="form-select"
               value={adminForm.role}
               onChange={(event) => setAdminForm({ ...adminForm, role: event.target.value as "support" | "super_admin" })}
             >
@@ -458,7 +575,7 @@ export function SuperAdminConsole() {
               <option value="super_admin">super_admin</option>
             </select>
           </label>
-          <button type="submit">Create Admin</button>
+          <button type="submit" className="btn btn-outline-theme fw-500">Create Admin</button>
         </form>
         {adminResult ? <p className={adminResult.ok ? "status-ok" : "status-error"}>{adminResult.message}</p> : null}
 
@@ -537,6 +654,6 @@ export function SuperAdminConsole() {
           </tbody>
         </table>
       </section>
-    </main>
+    </section>
   );
 }

@@ -1,0 +1,38 @@
+/* Studio Template CSS Imports */
+
+/* FontAwesome */
+@import url('https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css');
+
+/* Core CSS */
+@import url('/studio/assets/css/vendor.min.css');
+@import url('/studio/assets/css/app.min.css');
+
+/* Override and customize if needed */
+:root {
+  --studio-primary: #4a5568;
+  --studio-secondary: #718096;
+}
+
+/* Ensure proper full-height layout */
+html,
+body {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+#app {
+  min-height: 100vh;
+}
+
+/* Dashboard specific tweaks */
+.app-content {
+  background: #f4f7fb;
+  min-height: 100vh;
+}
+
+.studio-theme {
+  --bs-light: #f4f7fb;
+  --bs-light-rgb: 244, 247, 251;
+}

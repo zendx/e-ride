@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { sendNotification } from "@/lib/modules/notifications/service";
 import { logger } from "@/lib/logger";
@@ -53,7 +54,7 @@ export async function notifyTripUsers(input: {
             message: input.message,
             status: "sent",
             providerMessageId: response.providerMessageId,
-            payloadJson: input.payload ?? {}
+            payloadJson: (input.payload ?? {}) as Prisma.InputJsonValue
           }
         });
       } catch (error) {
@@ -66,7 +67,7 @@ export async function notifyTripUsers(input: {
             title: input.title,
             message: input.message,
             status: "failed",
-            payloadJson: input.payload ?? {}
+            payloadJson: (input.payload ?? {}) as Prisma.InputJsonValue
           }
         });
       }

@@ -1,10 +1,11 @@
-﻿import { TenantOpsConsole } from "./tenant-ops-console";
+import { TenantOpsConsole } from "./tenant-ops-console";
 
 export default async function TenantAdminPage() {
   return (
-    <main className="container">
-      <h1>Tenant Admin Operations</h1>
-      <p className="page-subtitle">Monitor riders, passengers, and trip lifecycle from request to completion or cancellation.</p>
+    <main className="container-fluid">
+      <h1 className="page-header mb-3">
+        Tenant Operations <small>live riders, trips, payments and support</small>
+      </h1>
       <TenantOpsConsole />
     </main>
   );
