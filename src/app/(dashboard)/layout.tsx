@@ -2,8 +2,10 @@
 
 import { ReactNode } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
+import type { Route } from "next";
+import { clearClientSession } from "@/lib/auth/client-session";
 import "./dashboard-theme.css";
 import "@/styles/studio.css";
 
@@ -13,28 +15,35 @@ function isActive(pathname: string, href: string) {
 }
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
+  const router = useRouter();
   const pathname = usePathname();
   const isLoginPage = pathname.endsWith("/login");
   const isTenant = pathname.startsWith("/tenant-admin");
   const dashboardHome = isTenant ? "/tenant-admin" : "/super-admin";
-  const navItems = isTenant
+  const loginHref = isTenant ? "/tenant-admin/login" : "/super-admin/login";
+  const navItems: Array<{ href: Route; label: string; icon: string }> = isTenant
     ? [
-        { href: "/tenant-admin", label: "Overview", icon: "fa-gauge-high" },
-        { href: "/tenant-admin/login", label: "Tenant Login", icon: "fa-right-to-bracket" }
+        { href: "/tenant-admin" as Route, label: "Overview", icon: "fa-gauge-high" },
+        { href: "/tenant-admin/login" as Route, label: "Tenant Login", icon: "fa-right-to-bracket" }
       ]
     : [
-        { href: "/super-admin", label: "Overview", icon: "fa-gauge-high" },
-        { href: "/super-admin/enroll", label: "Enroll Tenant", icon: "fa-user-plus" },
-        { href: "/super-admin/login", label: "Super Login", icon: "fa-right-to-bracket" }
+        { href: "/super-admin" as Route, label: "Overview", icon: "fa-gauge-high" },
+        { href: "/super-admin/enroll" as Route, label: "Enroll Tenant", icon: "fa-user-plus" },
+        { href: "/super-admin/login" as Route, label: "Super Login", icon: "fa-right-to-bracket" }
       ];
 
   const crumbs = pathname
     .split("/")
     .filter(Boolean)
     .map((segment, index, parts) => ({
-      href: `/${parts.slice(0, index + 1).join("/")}`,
+      href: `/${parts.slice(0, index + 1).join("/")}` as Route,
       label: segment.replace(/-/g, " ").replace(/\b\w/g, (char) => char.toUpperCase())
     }));
+
+  function handleLogout() {
+    clearClientSession();
+    router.push(loginHref);
+  }
 
   if (isLoginPage) {
     return (
@@ -78,10 +87,10 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
         <div className="dash-sidebar-footer">
           <p>{isTenant ? "Tenant Admin" : "Super Admin"}</p>
-          <Link href={isTenant ? "/tenant-admin/login" : "/super-admin/login"} className="dash-signout">
+          <button type="button" className="dash-signout-btn" onClick={handleLogout}>
             <i className="fa-solid fa-arrow-right-from-bracket" aria-hidden="true"></i>
-            <span>Switch account</span>
-          </Link>
+            <span>Logout</span>
+          </button>
         </div>
       </aside>
 
@@ -100,6 +109,10 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
               <i className="fa-regular fa-circle-user" aria-hidden="true"></i>
               {isTenant ? "tenant-admin" : "super-admin"}
             </span>
+            <button type="button" className="dash-header-logout" onClick={handleLogout}>
+              <i className="fa-solid fa-arrow-right-from-bracket" aria-hidden="true"></i>
+              Logout
+            </button>
           </div>
         </header>
 

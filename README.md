@@ -52,9 +52,16 @@ npm run dev
 
 ## Deploy to Vercel
 
-1. Create a PostgreSQL instance (Neon/Supabase/RDS).
-2. Create Redis instance (Upstash/Redis Cloud).
-3. Set env vars in Vercel project:
+1. Push this repo to GitHub.
+2. In Vercel, `Add New Project` -> import this repo.
+3. Build settings:
+   - Install Command: `npm install`
+   - Build Command: `npm run vercel-build`
+   - Output Directory: `.next` (default)
+4. Provision services:
+   - PostgreSQL (Neon/Supabase/RDS)
+   - Redis (Upstash/Redis Cloud)
+5. Set required environment variables in Vercel project:
    - `DATABASE_URL`
    - `REDIS_URL`
    - `JWT_ACCESS_SECRET`
@@ -62,7 +69,22 @@ npm run dev
    - `JWT_ACCESS_TTL`
    - `JWT_REFRESH_TTL`
    - `PLATFORM_BASE_DOMAIN`
-4. Run migration and seed from CI/CD or one-off job.
+6. Set optional environment variables if used:
+   - `DIRECT_URL` (recommended for Prisma migrate jobs)
+   - `NOTIFICATION_PROVIDER`
+   - `NOTIFICATION_FROM_EMAIL`
+   - `RESEND_API_KEY`
+7. Run Prisma migrations against production database (recommended from CI or local one-off):
+
+```bash
+npx prisma migrate deploy
+```
+
+8. (Optional) seed initial data:
+
+```bash
+npm run db:seed
+```
 
 ## API contracts
 
